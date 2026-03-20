@@ -1,356 +1,83 @@
 {
   "version": "1.0",
-  "description": "50-question eval set for PaperMind. Covers factual, cross-paper, and deliberately vague queries.",
+  "description": "Eval set for PaperMind. Add factual and cross-paper questions after ingesting your papers. Vague queries below are paper-agnostic and exercise the query rewrite loop.",
+  "schema": {
+    "id": "unique string, e.g. q001",
+    "question": "the question to ask the agent",
+    "question_type": "factual | cross_paper | vague",
+    "papers": ["list of paper titles relevant to this question"],
+    "ground_truth": "expected answer for RAGAS evaluation"
+  },
   "questions": [
     {
       "id": "q001",
-      "question": "What dataset was used to evaluate the model?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer after ingesting papers."
-    },
-    {
-      "id": "q002",
-      "question": "What is the main contribution of this paper?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q003",
-      "question": "What baseline methods were compared against?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q004",
-      "question": "What loss function was used during training?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q005",
-      "question": "What were the hardware requirements for training?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q006",
-      "question": "What preprocessing steps were applied to the data?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q007",
-      "question": "What hyperparameters were used and how were they tuned?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q008",
-      "question": "What are the limitations acknowledged by the authors?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q009",
-      "question": "What future work do the authors suggest?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q010",
-      "question": "What evaluation metrics were reported?",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q011",
-      "question": "How do the papers differ in their approach to handling out-of-distribution data?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer comparing multiple papers."
-    },
-    {
-      "id": "q012",
-      "question": "Compare the attention mechanisms described across the papers.",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q013",
-      "question": "How do the papers disagree on the best training data size?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q014",
-      "question": "Which papers use retrieval augmentation and how do their implementations differ?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q015",
-      "question": "How do the evaluation benchmarks used across these papers compare?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q016",
-      "question": "What architectural differences exist between the models proposed in these papers?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q017",
-      "question": "How do the papers approach the problem of hallucination in language models?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q018",
-      "question": "Summarise the different fine-tuning strategies discussed across the papers.",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q019",
-      "question": "Which paper reports the highest performance and why do the authors attribute it to their method?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q020",
-      "question": "How do the papers handle class imbalance in their datasets?",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE with actual answer."
-    },
-    {
-      "id": "q021",
       "question": "What did they find?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague, tests query rewriting."
+      "ground_truth": ""
     },
     {
-      "id": "q022",
+      "id": "q002",
       "question": "How is this different from the other approach?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague, tests query rewriting."
+      "ground_truth": ""
     },
     {
-      "id": "q023",
+      "id": "q003",
       "question": "Does it work well?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q024",
+      "id": "q004",
       "question": "What are the results?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q025",
+      "id": "q005",
       "question": "Why did they do it this way?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q026",
+      "id": "q006",
       "question": "Is this better than before?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q027",
+      "id": "q007",
       "question": "What's the main problem they're solving?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q028",
+      "id": "q008",
       "question": "How fast is it?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q029",
+      "id": "q009",
       "question": "What does the model do exactly?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
+      "ground_truth": ""
     },
     {
-      "id": "q030",
+      "id": "q010",
       "question": "What are they comparing against?",
       "question_type": "vague",
       "papers": [],
-      "ground_truth": "REPLACE — intentionally vague."
-    },
-    {
-      "id": "q031",
-      "question": "PLACEHOLDER — add factual question 31",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q032",
-      "question": "PLACEHOLDER — add factual question 32",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q033",
-      "question": "PLACEHOLDER — add factual question 33",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q034",
-      "question": "PLACEHOLDER — add factual question 34",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q035",
-      "question": "PLACEHOLDER — add factual question 35",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q036",
-      "question": "PLACEHOLDER — add factual question 36",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q037",
-      "question": "PLACEHOLDER — add factual question 37",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q038",
-      "question": "PLACEHOLDER — add factual question 38",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q039",
-      "question": "PLACEHOLDER — add factual question 39",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q040",
-      "question": "PLACEHOLDER — add factual question 40",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q041",
-      "question": "PLACEHOLDER — add cross-paper question 41",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q042",
-      "question": "PLACEHOLDER — add cross-paper question 42",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q043",
-      "question": "PLACEHOLDER — add cross-paper question 43",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q044",
-      "question": "PLACEHOLDER — add cross-paper question 44",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q045",
-      "question": "PLACEHOLDER — add cross-paper question 45",
-      "question_type": "cross_paper",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q046",
-      "question": "PLACEHOLDER — add factual question 46",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q047",
-      "question": "PLACEHOLDER — add factual question 47",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q048",
-      "question": "PLACEHOLDER — add factual question 48",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q049",
-      "question": "PLACEHOLDER — add factual question 49",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
-    },
-    {
-      "id": "q050",
-      "question": "PLACEHOLDER — add factual question 50",
-      "question_type": "factual",
-      "papers": [],
-      "ground_truth": "REPLACE."
+      "ground_truth": ""
     }
   ]
 }
