@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+# Env
+.env
+.env.local
+
+# Data (PDFs are large and potentially proprietary)
+data/papers/
+data/embeddings/
+
+# But track the test set
+!data/test_set/
+
+# Models cache
+.cache/
+models/
+huggingface/
+
+# Qdrant local storage (if running without Docker volume)
+qdrant_storage/
+
+# Eval results (generated, not committed)
+eval_results/
+*.jsonl
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# LangSmith / tracing
+langsmith_traces/
