@@ -52,13 +52,16 @@ class VectorStore:
                 ),
             )
             # Payload indexes for metadata filtering
-            for field_name in ("paper_id", "section", "year", "contains_math"):
+            for field_name, schema in (
+                ("paper_id", qmodels.PayloadSchemaType.KEYWORD),
+                ("section", qmodels.PayloadSchemaType.KEYWORD),
+                ("year", qmodels.PayloadSchemaType.INTEGER),
+                ("contains_math", qmodels.PayloadSchemaType.BOOL),
+            ):
                 self._client.create_payload_index(
                     collection_name=self._collection,
                     field_name=field_name,
-                    field_schema=qmodels.PayloadSchemaType.KEYWORD
-                    if field_name in ("paper_id", "section")
-                    else qmodels.PayloadSchemaType.INTEGER,
+                    field_schema=schema,
                 )
             logger.info("Created collection '%s'", self._collection)
 
