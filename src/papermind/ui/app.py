@@ -12,6 +12,21 @@ import streamlit as st
 from papermind.agent.graph import run as agent_run
 from papermind.ingestion.models import RetrievedChunk
 
+
+def _render_citations(citations: list[dict]) -> None:  # type: ignore[type-arg]
+    """Render the retrieval chain — shown only when debug mode is on."""
+    with st.expander("📎 Retrieved context", expanded=False):
+        for i, c in enumerate(citations, start=1):
+            score_bar = "█" * int(c.get("score", 0) * 10) + "░" * (10 - int(c.get("score", 0) * 10))
+            st.markdown(
+                f"**[{i}] {c['paper_title']}** · {c['section'].title()} · p.{c['page_number']}  \n"
+                f"`score: {c.get('score', 0):.3f}` `{score_bar}`  \n"
+                f"_{c.get('text_preview', '')}…_"
+            )
+            if i < len(citations):
+                st.divider()
+
+
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -97,17 +112,3 @@ if prompt := st.chat_input("Ask a question across your research papers…"):
     st.session_state.messages.append(
         {"role": "assistant", "content": answer, "citations": citations}
     )
-
-
-def _render_citations(citations: list[dict]) -> None:  # type: ignore[type-arg]
-    """Render the retrieval chain — shown only when debug mode is on."""
-    with st.expander("📎 Retrieved context", expanded=False):
-        for i, c in enumerate(citations, start=1):
-            score_bar = "█" * int(c.get("score", 0) * 10) + "░" * (10 - int(c.get("score", 0) * 10))
-            st.markdown(
-                f"**[{i}] {c['paper_title']}** · {c['section'].title()} · p.{c['page_number']}  \n"
-                f"`score: {c.get('score', 0):.3f}` `{score_bar}`  \n"
-                f"_{c.get('text_preview', '')}…_"
-            )
-            if i < len(citations):
-                st.divider()
