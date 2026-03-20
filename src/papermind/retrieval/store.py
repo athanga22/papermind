@@ -97,16 +97,16 @@ class VectorStore:
     ) -> list[tuple[Chunk, float]]:
         """Dense similarity search. Returns (chunk, score) pairs sorted desc."""
         query_vec = self._embedder.embed(query)
-        results = self._client.search(
+        response = self._client.query_points(
             collection_name=self._collection,
-            query_vector=query_vec,
+            query=query_vec,
             limit=top_k,
             query_filter=filter_,
             with_payload=True,
         )
         return [
             (Chunk.from_payload(str(r.id), r.payload or {}), r.score)
-            for r in results
+            for r in response.points
         ]
 
     def get_all_chunks(self) -> list[Chunk]:
