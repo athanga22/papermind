@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ..agent.graph import run as agent_run
-from ..ingestion.models import RetrievedChunk
+from papermind.agent.graph import run as agent_run
+from papermind.ingestion.models import RetrievedChunk
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
