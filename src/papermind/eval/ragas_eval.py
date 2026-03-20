@@ -20,9 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
+from ragas.dataset_schema import EvaluationDataset, SingleTurnSample
+from ragas.metrics import AnswerRelevancy, ContextPrecision, ContextRecall, Faithfulness
 
 from ..agent.graph import run as agent_run
 from .test_set import TestSet
@@ -81,7 +81,7 @@ def run_evaluation(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows: list[dict] = []  # type: ignore[type-arg]
+    samples: list[SingleTurnSample] = []
 
     for i, q in enumerate(test_set.questions, start=1):
         logger.info("[%d/%d] %s", i, len(test_set), q.question)
@@ -94,21 +94,21 @@ def run_evaluation(
             contexts = []
             answer = ""
 
-        rows.append(
-            {
-                "question": q.question,
-                "answer": answer,
-                "contexts": contexts,
-                "ground_truth": q.ground_truth,
-            }
+        samples.append(
+            SingleTurnSample(
+                user_input=q.question,
+                response=answer,
+                retrieved_contexts=contexts,
+                reference=q.ground_truth,
+            )
         )
 
-    dataset = Dataset.from_list(rows)
+    dataset = EvaluationDataset(samples=samples)
 
     logger.info("Running RAGAS metrics for stage '%s'", stage_name)
     ragas_result = evaluate(
         dataset,
-        metrics=[context_precision, context_recall, faithfulness, answer_relevancy],
+        metrics=[ContextPrecision(), ContextRecall(), Faithfulness(), AnswerRelevancy()],
     )
 
     scores = ragas_result.to_pandas()
