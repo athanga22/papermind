@@ -172,14 +172,15 @@ def parse_pdf(path: str | Path) -> Paper:
             buffer.append(text)
             buffer_pages.append(blk["page"])
 
-    _flush_section(next_page=len(doc))
+    page_count = len(doc)
+    _flush_section(next_page=page_count)
     doc.close()
 
     # Deduplicate / merge tiny adjacent same-named sections
     merged = _merge_duplicate_sections(sections)
 
     logger.info(
-        "Parsed '%s': %d sections, %d pages", title, len(merged), len(doc)  # type: ignore[arg-type]
+        "Parsed '%s': %d sections, %d pages", title, len(merged), page_count
     )
     return Paper(title=title, authors=authors, year=year, path=str(path), sections=merged)
 
