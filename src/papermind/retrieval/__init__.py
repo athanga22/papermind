@@ -1,1 +1,1 @@
-"""Retrieval layer: embeddings, BM25, RRF fusion, cross-encoder reranking, Qdrant store."""
+"""Retrieval layer — Step 1: dense embeddings + Qdrant."""

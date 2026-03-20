@@ -1,4 +1,4 @@
-.PHONY: install dev-install up down ingest eval ui lint typecheck test clean
+.PHONY: install dev-install up down ingest query lint test clean
 
 # ── Setup ──────────────────────────────────────────────────────────────
 install:
@@ -15,16 +15,18 @@ up:
 down:
 	docker compose down
 
-# ── Core workflows ─────────────────────────────────────────────────────
+# ── Step 1 workflows ───────────────────────────────────────────────────
 ingest:
 	@test -n "$(PDF_DIR)" || (echo "Usage: make ingest PDF_DIR=./data/papers" && exit 1)
 	python -m papermind.scripts.ingest --pdf-dir $(PDF_DIR)
 
-eval:
-	python -m papermind.scripts.evaluate --test-set data/test_set/questions.json
+ingest-fresh:
+	@test -n "$(PDF_DIR)" || (echo "Usage: make ingest-fresh PDF_DIR=./data/papers" && exit 1)
+	python -m papermind.scripts.ingest --pdf-dir $(PDF_DIR) --recreate
 
-ui:
-	streamlit run src/papermind/ui/app.py
+query:
+	@test -n "$(Q)" || (echo 'Usage: make query Q="your question here"' && exit 1)
+	python -m papermind.scripts.query "$(Q)"
 
 # ── Quality ────────────────────────────────────────────────────────────
 lint:
@@ -35,17 +37,11 @@ format:
 	ruff format src/ tests/
 	ruff check --fix src/ tests/
 
-typecheck:
-	mypy src/
-
 test:
 	pytest
-
-test-verbose:
-	pytest -v --tb=short
 
 # ── Cleanup ────────────────────────────────────────────────────────────
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; true
 	find . -type f -name "*.pyc" -delete
-	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage dist build *.egg-info
+	rm -rf .pytest_cache .ruff_cache dist build *.egg-info
