@@ -1,5 +1,5 @@
 """
-CLI: ingest PDFs into Qdrant.
+CLI: parse PDFs and index them into Qdrant.
 
 Usage:
     python -m papermind.scripts.ingest --pdf-dir ./data/papers
@@ -22,11 +22,11 @@ from ..ingestion.parser import parse_pdf
 from ..retrieval.store import get_store
 
 console = Console()
-logging.basicConfig(level=logging.WARNING)  # Suppress verbose model logs in CLI
+logging.basicConfig(level=logging.WARNING)
 
 
 @click.command()
-@click.option("--pdf-dir", required=True, type=click.Path(exists=True), help="Directory of PDFs")
+@click.option("--pdf-dir", required=True, type=click.Path(exists=True))
 @click.option("--recreate", is_flag=True, default=False, help="Drop and recreate the collection")
 @click.option("--verbose", "-v", is_flag=True, default=False)
 def main(pdf_dir: str, recreate: bool, verbose: bool) -> None:
@@ -38,49 +38,37 @@ def main(pdf_dir: str, recreate: bool, verbose: bool) -> None:
         console.print(f"[red]No PDFs found in {pdf_dir}[/red]")
         sys.exit(1)
 
-    console.print(f"\n[bold]PaperMind Ingest[/bold] — {len(pdfs)} PDF(s) found\n")
+    console.print(f"\n[bold]PaperMind Ingest[/bold] — {len(pdfs)} PDF(s)\n")
 
     store = get_store()
     store.ensure_collection(recreate=recreate)
 
     stats: list[dict] = []  # type: ignore[type-arg]
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
         for pdf in pdfs:
             task = progress.add_task(f"[cyan]{pdf.name}[/cyan]", total=None)
-
             try:
                 paper = parse_pdf(pdf)
                 chunks = chunk_paper(paper)
                 store.upsert_chunks(chunks)
-                stats.append(
-                    {
-                        "file": pdf.name,
-                        "title": paper.title[:50],
-                        "sections": len(paper.sections),
-                        "chunks": len(chunks),
-                        "status": "[green]OK[/green]",
-                    }
-                )
+                stats.append({
+                    "file": pdf.name,
+                    "title": paper.title[:50],
+                    "sections": len(paper.sections),
+                    "chunks": len(chunks),
+                    "status": "[green]OK[/green]",
+                })
             except Exception as e:
-                console.print(f"\n[red]Error processing {pdf.name}: {e}[/red]")
-                stats.append(
-                    {
-                        "file": pdf.name,
-                        "title": "-",
-                        "sections": 0,
-                        "chunks": 0,
-                        "status": f"[red]FAILED: {e}[/red]",
-                    }
-                )
-
+                stats.append({
+                    "file": pdf.name,
+                    "title": "-",
+                    "sections": 0,
+                    "chunks": 0,
+                    "status": f"[red]FAILED: {e}[/red]",
+                })
             progress.remove_task(task)
 
-    # Summary table
     table = Table(title="Ingestion Summary", show_lines=True)
     table.add_column("File", style="cyan")
     table.add_column("Title")

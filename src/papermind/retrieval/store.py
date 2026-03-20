@@ -1,9 +1,7 @@
 """
-Qdrant vector store wrapper.
+Qdrant vector store — Step 1: dense search only.
 
-Handles collection management, upserting chunks, and dense similarity search.
-BM25 lives in-memory (sparse.py); Qdrant owns the dense index and the
-canonical chunk payload store.
+Handles collection setup, upserting chunks, and cosine similarity search.
 """
 
 from __future__ import annotations
@@ -32,10 +30,8 @@ class VectorStore:
         self._collection = collection
         self._embedder = embedder or get_embedder()
 
-    # ── Collection management ─────────────────────────────────────────────
-
     def ensure_collection(self, recreate: bool = False) -> None:
-        """Create the collection if it doesn't exist (or recreate it)."""
+        """Create the collection if it doesn't exist, or recreate it."""
         existing = {c.name for c in self._client.get_collections().collections}
 
         if recreate and self._collection in existing:
@@ -51,7 +47,7 @@ class VectorStore:
                     distance=qmodels.Distance.COSINE,
                 ),
             )
-            # Payload indexes for metadata filtering
+            # Index fields we'll filter on later
             for field_name, schema in (
                 ("paper_id", qmodels.PayloadSchemaType.KEYWORD),
                 ("section", qmodels.PayloadSchemaType.KEYWORD),
@@ -65,10 +61,8 @@ class VectorStore:
                 )
             logger.info("Created collection '%s'", self._collection)
 
-    # ── Ingestion ─────────────────────────────────────────────────────────
-
     def upsert_chunks(self, chunks: list[Chunk], batch_size: int = 64) -> None:
-        """Embed and upsert chunks in batches."""
+        """Embed and upsert chunks into Qdrant in batches."""
         if not chunks:
             return
 
@@ -85,57 +79,34 @@ class VectorStore:
         ]
 
         for i in range(0, len(points), batch_size):
-            batch = points[i : i + batch_size]
-            self._client.upsert(collection_name=self._collection, points=batch)
+            self._client.upsert(
+                collection_name=self._collection,
+                points=points[i : i + batch_size],
+            )
 
         logger.info("Upserted %d chunks into '%s'", len(chunks), self._collection)
-
-    # ── Retrieval ─────────────────────────────────────────────────────────
 
     def search(
         self,
         query: str,
         top_k: int = settings.dense_top_k,
-        filter_: qmodels.Filter | None = None,
-    ) -> list[tuple[Chunk, float]]:
-        """Dense similarity search. Returns (chunk, score) pairs sorted desc."""
+    ) -> list[RetrievedChunk]:
+        """Dense cosine similarity search. Returns RetrievedChunks sorted by score."""
         query_vec = self._embedder.embed(query)
         response = self._client.query_points(
             collection_name=self._collection,
             query=query_vec,
             limit=top_k,
-            query_filter=filter_,
             with_payload=True,
         )
         return [
-            (Chunk.from_payload(str(r.id), r.payload or {}), r.score)
-            for r in response.points
-        ]
-
-    def get_all_chunks(self) -> list[Chunk]:
-        """
-        Scroll through all chunks — used to rebuild the BM25 index on startup.
-        For large collections this should be paginated; fine for portfolio scale.
-        """
-        chunks: list[Chunk] = []
-        offset = None
-
-        while True:
-            records, offset = self._client.scroll(
-                collection_name=self._collection,
-                limit=256,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,
+            RetrievedChunk(
+                chunk=Chunk.from_payload(str(r.id), r.payload or {}),
+                score=r.score,
+                rank=i + 1,
             )
-            for rec in records:
-                if rec.payload:
-                    chunks.append(Chunk.from_payload(str(rec.id), rec.payload))
-            if offset is None:
-                break
-
-        logger.info("Loaded %d chunks from Qdrant for BM25 rebuild", len(chunks))
-        return chunks
+            for i, r in enumerate(response.points)
+        ]
 
     def count(self) -> int:
         return self._client.count(collection_name=self._collection).count
@@ -143,5 +114,4 @@ class VectorStore:
 
 @lru_cache(maxsize=1)
 def get_store() -> VectorStore:
-    """Module-level singleton."""
     return VectorStore()
