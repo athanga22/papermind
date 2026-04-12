@@ -19,6 +19,7 @@ env/
 # Data (PDFs are large and potentially proprietary)
 data/papers/
 data/embeddings/
+data/parsed/     # LlamaParse markdown cache — generated, not committed
 
 # But track the test set
 !data/test_set/
