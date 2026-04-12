@@ -1,0 +1,22 @@
+# RAGAS evaluation quality gate — wired in Phase 9
+# Triggers on every push to main, blocks merge if metrics drop below threshold
+#
+# Thresholds (Phase 9):
+#   context_recall >= 0.80
+#   faithfulness   >= 0.85
+#   answer_relevancy >= 0.80
+
+name: eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Phase 0 stub — eval harness wired in Phase 9
+        run: echo "Eval gate not yet configured"

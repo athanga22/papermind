@@ -38,6 +38,12 @@ eval_results/
 # Streamlit
 .streamlit/secrets.toml
 
+# Docs (PDFs and internal planning docs — not for repo)
+docs/
+
+# Claude Code internal session data
+.claude/
+
 # IDE
 .vscode/
 .idea/
