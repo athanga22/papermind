@@ -16,7 +16,7 @@ from pathlib import Path
 
 import bm25s
 
-from ingestion.models import Chunk
+from ingestion.models import Chunk, contextualize_chunk
 
 BM25_DIR = Path("data/bm25")
 
@@ -39,7 +39,9 @@ class BM25Index:
         Build (or rebuild) the BM25 index from the given chunks.
         Persists the index and chunk_id mapping to disk.
         """
-        texts = [c.text for c in chunks]
+        # Index contextualized text (with metadata prefix) so BM25 can match
+        # on paper titles, author names, and section keywords — not just body text.
+        texts = [contextualize_chunk(c) for c in chunks]
         self._chunk_ids = [c.chunk_id for c in chunks]
 
         corpus_tokens = bm25s.tokenize(

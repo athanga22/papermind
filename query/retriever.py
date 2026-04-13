@@ -196,10 +196,14 @@ class TrimodalRetriever:
         top_k: int = TOP_K_FINAL,
         use_dense: bool = True,
         use_bm25:  bool = True,
-        use_graph: bool = True,
+        use_graph: bool = False,
     ) -> list[RetrievedChunk]:
         """
-        Run trimodal retrieval and return top_k fused results.
+        Run hybrid retrieval and return top_k fused results.
+
+        Default: dense + BM25 (97% Hit@5, MRR=0.737).
+        Graph is opt-in — it returns disjoint results that dilute RRF fusion,
+        dropping Hit@5 from 97% → 90% when enabled.
         """
         query_vec = self._embed(query)
 
