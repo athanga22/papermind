@@ -67,12 +67,13 @@ def run_eval():
 
             console.print(f"[dim][{i:02d}/{len(silver)}][/dim] {q[:80]}...")
 
-            # ── Run all 4 modes ───────────────────────────────────────────────
+            # ── Run all modes ─────────────────────────────────────────────────
             modes = {
-                "trimodal": dict(use_dense=True,  use_bm25=True,  use_graph=True),
-                "dense":    dict(use_dense=True,  use_bm25=False, use_graph=False),
-                "bm25":     dict(use_dense=False, use_bm25=True,  use_graph=False),
-                "graph":    dict(use_dense=False, use_bm25=False, use_graph=True),
+                "dense+bm25": dict(use_dense=True,  use_bm25=True,  use_graph=False),
+                "trimodal":   dict(use_dense=True,  use_bm25=True,  use_graph=True),
+                "dense":      dict(use_dense=True,  use_bm25=False, use_graph=False),
+                "bm25":       dict(use_dense=False, use_bm25=True,  use_graph=False),
+                "graph":      dict(use_dense=False, use_bm25=False, use_graph=True),
             }
 
             mode_results = {}
@@ -129,7 +130,7 @@ def run_eval():
     metrics_table.add_column("Hit@10", justify="right")
     metrics_table.add_column("MRR",    justify="right")
 
-    for mode in ["trimodal", "dense", "bm25", "graph"]:
+    for mode in ["dense+bm25", "trimodal", "dense", "bm25", "graph"]:
         h = {f"hit@{k}": 0 for k in K_VALUES}
         rr_sum = 0.0
         for r in single:
@@ -156,10 +157,9 @@ def run_eval():
     detail_table.add_column("#",       width=3,  justify="right")
     detail_table.add_column("Type",    width=12)
     detail_table.add_column("Question",           max_width=38)
-    detail_table.add_column("tri\nH@5", width=5, justify="center")
+    detail_table.add_column("d+b\nH@5", width=5, justify="center")
     detail_table.add_column("den\nH@5", width=5, justify="center")
     detail_table.add_column("bm25\nH@5",width=5, justify="center")
-    detail_table.add_column("graph\nH@5",width=6, justify="center")
     detail_table.add_column("Top-1 chunk",        max_width=35)
 
     for r in results:
@@ -172,7 +172,7 @@ def run_eval():
             ok = r["modes"][mode].get("hits", {}).get("hit@5", False)
             return "[green]✓[/green]" if ok else "[red]✗[/red]"
 
-        top1 = r["modes"]["trimodal"]["top3"][0] if r["modes"]["trimodal"]["top3"] else {}
+        top1 = r["modes"]["dense+bm25"]["top3"][0] if r["modes"]["dense+bm25"]["top3"] else {}
         top1_str = f"{top1.get('paper','?')[:20]}…\n[dim]{top1.get('section','')[:20]}[/dim]"
 
         q_type_display = r["type"]
@@ -183,10 +183,9 @@ def run_eval():
             str(r["id"]),
             q_type_display,
             r["question"][:38],
-            hit_str("trimodal"),
+            hit_str("dense+bm25"),
             hit_str("dense"),
             hit_str("bm25"),
-            hit_str("graph"),
             top1_str,
         )
 
@@ -198,7 +197,7 @@ def run_eval():
         console.print(f"\n[bold]Cross-paper questions — top 3 retrieved chunks:[/bold]")
         for r in cross:
             console.print(f"\n  [bold][{r['id']}] {r['question'][:70]}[/bold]")
-            for hit in r["modes"]["trimodal"]["top3"]:
+            for hit in r["modes"]["dense+bm25"]["top3"]:
                 console.print(
                     f"    [{', '.join(hit['sources'])}] "
                     f"{hit['paper'][:35]:35s} | {hit['section'][:25]:25s} | "

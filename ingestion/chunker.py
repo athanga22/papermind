@@ -5,8 +5,11 @@ Strategy:
   1. Filter artifact headers (figure labels, diagram annotations, page numbers)
   2. Split markdown into sections on real # headers
   3. Within each section, extract tables as intact single chunks
-  4. Split remaining text with SentenceSplitter (256 tokens, 20 overlap)
+  4. Split remaining text with SentenceSplitter (512 tokens, 64 overlap)
   5. Drop nodes shorter than 50 chars — empty/noise
+
+256→512 tokens: analytical/methodology queries (80%+ of our eval set) need
+more context per chunk. 64-token overlap (~12%) preserves cross-boundary context.
 
 No LLM calls during chunking. Table integrity preserved without MarkdownElementNodeParser
 (which requires an LLM for table summarisation even when llm=None).
@@ -132,7 +135,7 @@ class PaperChunker:
     these are injected in Step 3.
     """
 
-    def __init__(self, chunk_size: int = 256, chunk_overlap: int = 20) -> None:
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64) -> None:
         self._splitter = SentenceSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,

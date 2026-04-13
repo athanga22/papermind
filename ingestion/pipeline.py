@@ -69,7 +69,7 @@ def run_pipeline(
 
     # ── Steps 2-3: Chunk + metadata ───────────────────────────────────────────
     console.print(f"\n[bold]Steps 2-3:[/bold] Chunking + metadata extraction...")
-    chunker = PaperChunker(chunk_size=256, chunk_overlap=20)
+    chunker = PaperChunker(chunk_size=512, chunk_overlap=64)
     all_chunks: list[Chunk] = []
     paper_chunks: dict[str, list[Chunk]] = {}  # paper_id → chunks
     bibs = []

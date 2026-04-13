@@ -20,7 +20,7 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
-from ingestion.models import Chunk
+from ingestion.models import Chunk, contextualize_chunk
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -102,7 +102,9 @@ class ChunkEmbedder:
         """
         total = 0
         for batch in _batched(chunks, EMBED_BATCH_SIZE):
-            texts = [c.text for c in batch]
+            # Embed contextualized text (with metadata prefix) for better retrieval.
+            # Raw c.text stays in the payload for display/synthesis.
+            texts = [contextualize_chunk(c) for c in batch]
             embeddings = self._embed_texts(texts)
 
             points = [
