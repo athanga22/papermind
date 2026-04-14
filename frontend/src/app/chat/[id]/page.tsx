@@ -117,12 +117,11 @@ export default function AnswerDetailPage({ params }: { params: { id: string } })
     ? conversation.messages.find(m => m.id === msgId)
     : conversation.messages.filter(m => m.role === 'assistant').at(-1)
 
+  const targetIndex = targetMsg ? conversation.messages.indexOf(targetMsg) : -1
   const userMsg = targetMsg
-    ? conversation.messages.find(
-        (m, i) =>
-          m.role === 'user' &&
-          i < conversation.messages.indexOf(targetMsg)
-      )
+    ? conversation.messages
+        .filter((m, i) => m.role === 'user' && i < targetIndex)
+        .at(-1) ?? null
     : null
 
   const [showAllChunks, setShowAllChunks] = useState(false)
