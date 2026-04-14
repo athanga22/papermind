@@ -64,3 +64,9 @@ htmlcov/
 
 # LangSmith / tracing
 langsmith_traces/
+
+# Next.js
+.next/
+frontend/.next/
+*.env.local
+*.env*.local
