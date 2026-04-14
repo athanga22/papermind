@@ -20,6 +20,9 @@ export default function LandingPage() {
             <Link href="/chat" className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
               Chat
             </Link>
+            <Link href="/about" className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
+              About
+            </Link>
             <Link
               href="/library"
               data-testid="nav-get-started"
@@ -45,7 +48,7 @@ export default function LandingPage() {
             data-testid="hero-badge"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            Agentic RAG · Claude · RAGAS 0.95 faithfulness
+            Agentic RAG · Claude · Precise attribution
           </div>
 
           <h1
@@ -138,7 +141,7 @@ export default function LandingPage() {
                 and re-plans when context is insufficient.
               </p>
               <div className="mt-4 pt-4 border-t border-zinc-800 font-mono text-xs text-zinc-600 flex gap-3">
-                <span>RAGAS 0.956 faithfulness</span>
+                <span>classifier → planner → retrieve → synthesize</span>
               </div>
             </div>
 
@@ -212,33 +215,6 @@ export default function LandingPage() {
                 graph to surface evidence that pure vector retrieval misses.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* RAGAS metrics strip */}
-      <section className="border-t border-zinc-800/60 py-16 px-6" data-testid="metrics-section">
-        <div className="max-w-6xl mx-auto">
-          <p className="font-mono text-xs text-zinc-600 text-center mb-8">
-            RAGAS evaluation · Agent v1 · n=56 questions · judge: gpt-4o-mini
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'Faithfulness', value: '0.956', change: '+0.055', color: 'text-green-400' },
-              { label: 'Ctx Recall', value: '0.958', change: '+0.100', color: 'text-green-400' },
-              { label: 'Ans Relevancy', value: '0.760', change: '+0.176', color: 'text-amber-400' },
-              { label: 'Hit@5', value: '97%', change: 'stable', color: 'text-zinc-400' },
-            ].map((m) => (
-              <div
-                key={m.label}
-                className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 text-center"
-                data-testid={`metric-${m.label.toLowerCase().replace(' ', '-')}`}
-              >
-                <div className={`font-mono text-2xl font-medium ${m.color} mb-1`}>{m.value}</div>
-                <div className="text-xs text-zinc-500 mb-2">{m.label}</div>
-                <div className="font-mono text-xs text-zinc-600">{m.change}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>

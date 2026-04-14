@@ -10,6 +10,7 @@ import {
   AlertCircle,
   FileText,
   ChevronDown,
+  ChevronRight,
   RotateCcw,
   Layers,
   Clock,
@@ -379,22 +380,20 @@ export default function AnswerDetailPage({ params }: { params: { id: string } })
               </div>
             </div>
 
-            {/* RAGAS context */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-              <p className="font-mono text-xs text-zinc-600 mb-3">RAGAS context (agent v1 eval)</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Faithfulness', value: '0.956' },
-                  { label: 'Ctx Recall', value: '0.958' },
-                  { label: 'Relevancy', value: '0.760' },
-                  { label: 'Precision', value: '0.614' },
-                ].map(({ label, value }) => (
-                  <div key={label} className="text-center">
-                    <div className="font-mono text-sm text-zinc-300">{value}</div>
-                    <div className="font-mono text-xs text-zinc-600 mt-0.5">{label}</div>
-                  </div>
-                ))}
+            {/* Architecture link */}
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-zinc-300 font-medium">Want to understand the full pipeline?</p>
+                <p className="text-xs text-zinc-600 mt-0.5">The About page documents every architectural decision with evaluation data.</p>
               </div>
+              <Link
+                href="/about#agent"
+                data-testid="trace-about-link"
+                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0 ml-4"
+              >
+                About
+                <ChevronRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
         )}
