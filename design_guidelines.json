@@ -1,0 +1,81 @@
+{
+  "theme": "dark",
+  "archetype": "4 (Swiss & High-Contrast) adapted for Dark Mode (Linear & Obsidian style)",
+  "colors": {
+    "background": "#09090B",
+    "surface": "#18181B",
+    "surface_hover": "#27272A",
+    "border": "#27272A",
+    "border_active": "#3F3F46",
+    "text_primary": "#FAFAFA",
+    "text_secondary": "#A1A1AA",
+    "text_muted": "#71717A",
+    "accent": "#FFFFFF",
+    "confidence_high": "#22C55E",
+    "confidence_medium": "#F59E0B",
+    "confidence_low": "#EF4444"
+  },
+  "typography": {
+    "headings": "IBM Plex Sans",
+    "body": "Inter",
+    "mono": "JetBrains Mono",
+    "serif": "Newsreader",
+    "h1": "text-4xl md:text-5xl font-semibold tracking-tight text-zinc-50",
+    "h2": "text-2xl md:text-3xl font-medium tracking-tight text-zinc-50",
+    "h3": "text-xl font-medium tracking-tight text-zinc-100",
+    "body_text": "text-base text-zinc-300 leading-relaxed",
+    "metadata": "text-xs font-mono text-zinc-400 tracking-wider"
+  },
+  "spacing_and_layout": {
+    "general": "Generous spacing on landing page (p-12 to p-24). Tight control-room spacing in app (p-4 to p-6).",
+    "border_radius": "rounded-md (6px) or rounded-lg (8px) for premium feel, never fully rounded except for icon buttons/pills.",
+    "app_layout": "Sidebar on left (w-64, border-r border-zinc-800). Main content area takes remaining width. Chat messages constrained to max-w-3xl for readability."
+  },
+  "components": {
+    "cards": "bg-zinc-900 border border-zinc-800 rounded-lg p-6 hover:border-zinc-700 transition-colors",
+    "buttons_primary": "bg-white text-black font-medium rounded-md px-4 py-2 hover:bg-zinc-200 transition-colors",
+    "buttons_secondary": "bg-zinc-900 border border-zinc-800 text-zinc-100 hover:bg-zinc-800 rounded-md px-4 py-2 transition-colors",
+    "inputs": "bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 outline-none w-full",
+    "citations": "inline-flex items-center px-1.5 py-0.5 mx-1 rounded text-xs font-mono bg-zinc-800 text-zinc-300 border border-zinc-700 hover:border-zinc-500 cursor-pointer transition-colors align-middle",
+    "dropzone": "border-2 border-dashed border-zinc-800 rounded-xl p-12 flex flex-col items-center justify-center text-zinc-400 hover:border-zinc-600 hover:bg-zinc-900/50 transition-all cursor-pointer",
+    "chat_message_user": "bg-zinc-900 border border-zinc-800 rounded-lg p-4 ml-auto max-w-[80%] text-zinc-100",
+    "chat_message_ai": "bg-transparent p-4 mr-auto max-w-3xl prose prose-invert text-zinc-300",
+    "confidence_badge": "inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-zinc-900 border border-zinc-800"
+  },
+  "pages": {
+    "landing": {
+      "path": "/",
+      "hero": "Dark abstract background with subtle grid or noise. Massive H1, punchy subheadline, primary CTA to enter app. Overlay max bg-black/50 to ensure text legibility.",
+      "features": "Bento grid with 3 main features (Agentic RAG, Inline Citations, Multi-Paper Synthesis) using card styling."
+    },
+    "library": {
+      "path": "/library",
+      "layout": "Top area contains the drag-and-drop upload dropzone (max 10 papers). Below is a grid/list of ingested papers.",
+      "paper_card": "Uses card styling. Displays metadata (title, authors, year, chunk count) using the mono font. Includes a 'Remove' button with a trash icon."
+    },
+    "chat": {
+      "path": "/chat",
+      "layout": "Left sidebar (w-64) listing ingested papers and context. Main central area for the chat history. Bottom fixed input area.",
+      "input_area": "Floating pill or wide bar fixed at bottom, with a text input and send icon button.",
+      "message": "AI answer displays rendered Markdown, confidence badge (high/med/low), and inline citation pills. Includes a sub-queries expansion panel (agent trace)."
+    },
+    "answer_detail": {
+      "path": "/chat/[id]",
+      "layout": "A detailed view (could be a full page or a right sidebar panel). Shows the full answer, retrieved chunks in the serif font for deep reading, and the agent replan count / trace."
+    }
+  },
+  "media": {
+    "hero_background": "https://images.unsplash.com/photo-1633602114554-be8c2c5d6828?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGFyY2hpdGVjdHVyZSUyMGRhcmt8ZW58MHx8fHwxNzc2MTQwMTgwfDA&ixlib=rb-4.1.0&q=85",
+    "feature_background": "https://images.unsplash.com/photo-1598789858997-66ad403aa8e1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxtaW5pbWFsaXN0JTIwd29ya3NwYWNlJTIwZGFya3xlbnwwfHx8fDE3NzYxNDAxODB8MA&ixlib=rb-4.1.0&q=85",
+    "icons": "lucide-react"
+  },
+  "instructions_to_main_agent": [
+    "Implement a premium 'Linear' aesthetic: deep dark grays (#09090B to #18181B), very subtle 1px borders (#27272A), avoiding heavy shadows, gradients, and purely black/white extremes.",
+    "Use Next.js 14 App Router layout structure as specified in constraints.",
+    "All interactive elements MUST have explicit data-testid attributes (e.g., data-testid='upload-dropzone', data-testid='chat-input', data-testid='citation-pill').",
+    "For citations, use compact inline pill elements that look distinct from regular text, styled with monospace font.",
+    "Ensure the chat main reading column is centered and constrained to max-w-3xl for optimal readability.",
+    "Use mock data across the application for papers, chat history, agent sub-queries, and confidence scores. No backend wiring is needed.",
+    "Build the Answer Detail view (/chat/[id]) such that it can display detailed retrieved chunks with paper attribution, utilizing the Serif font (Newsreader) for the long-form text content."
+  ]
+}
