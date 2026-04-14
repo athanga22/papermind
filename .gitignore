@@ -15,11 +15,13 @@ env/
 # Env
 .env
 .env.local
+.env.*
+*.env
 
 # Data (PDFs are large and potentially proprietary)
 data/papers/
 data/embeddings/
-data/parsed/     # LlamaParse markdown cache — generated, not committed
+data/parsed/
 
 # But track the test set
 !data/test_set/
@@ -64,39 +66,14 @@ htmlcov/
 
 # LangSmith / tracing
 langsmith_traces/
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
+
+# Credentials
 credentials.json
 *.pem
 *.key
 .credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
+
+# Frontend build artifacts (Next.js)
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
