@@ -77,3 +77,12 @@ credentials.json
 frontend/.next/
 frontend/node_modules/
 frontend/.env.local
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
