@@ -24,8 +24,14 @@ import anthropic
 from query.state import PaperMindState
 
 
+# Agent synthesis uses Sonnet — cross-paper synthesis is reasoning-heavy.
+# Override with PAPERMIND_SYNTHESIS_MODEL env var if needed.
 SYNTHESIS_MODEL = os.getenv("PAPERMIND_SYNTHESIS_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = int(os.getenv("PAPERMIND_SYNTHESIS_MAX_TOKENS", "900"))
+# Hard cap on chunks sent to synthesis. With 5 chunks per sub-query and up to 6
+# sub-queries, deduped chunks can still reach 20-30. Beyond ~20, synthesis quality
+# degrades — too much noise, answer relevancy drops.
+MAX_SYNTHESIS_CHUNKS = int(os.getenv("PAPERMIND_SYNTHESIS_MAX_CHUNKS", "20"))
 
 
 _SYSTEM = """\
@@ -68,9 +74,29 @@ def _parse_confidence(raw: str) -> str:
     return m.group(1) if m else "medium"
 
 
+def _dedup_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Deduplicate chunks by chunk_id.
+
+    Multiple sub-queries may retrieve the same chunk. Keep the first occurrence
+    (highest-score, since retrieval nodes return descending-score results).
+    """
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for c in chunks:
+        cid = str(c.get("chunk_id", id(c)))
+        if cid not in seen:
+            seen.add(cid)
+            out.append(c)
+    return out
+
+
 def synthesis_node(state: PaperMindState) -> dict[str, Any]:
     query = state.get("query") or ""
-    chunks = list(state.get("retrieved_chunks") or [])
+    raw_chunks = list(state.get("retrieved_chunks") or [])
+    # rerank_node already deduped, reranked, and capped at RERANK_TOP_N.
+    # _dedup_chunks here is a safety net in case rerank_node was bypassed.
+    chunks = _dedup_chunks(raw_chunks)[:MAX_SYNTHESIS_CHUNKS]
     if not chunks:
         return {
             "synthesis": "I don't have enough information in the provided sources to answer this question reliably."

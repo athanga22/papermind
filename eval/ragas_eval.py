@@ -71,6 +71,7 @@ from ragas.metrics.collections import (
     Faithfulness,
 )
 
+from query.agent import run_agent
 from query.pipeline import RAGPipeline
 from query.tracing import shutdown as langfuse_shutdown
 
@@ -96,7 +97,9 @@ def _output_paths(args) -> tuple[Path, Path]:
         return p, p.with_suffix(".log")
 
     parts = ["eval_ragas"]
-    if args.rerank and args.graph:
+    if getattr(args, "agent", False):
+        parts.append("agent")
+    elif args.rerank and args.graph:
         parts.append("step3_full")
     elif args.rerank:
         parts.append("step2_rerank")
@@ -184,6 +187,78 @@ def run_pipeline_for_all(
         _save_checkpoint(out_path, records)
 
         time.sleep(inter_question_sleep)
+
+    return records
+
+
+# ── Agent pipeline runner ─────────────────────────────────────────────────────
+
+def run_agent_for_all(
+    questions: list[dict],
+    existing: list[dict],
+    out_path: Path,
+) -> list[dict]:
+    """
+    Run the LangGraph agentic pipeline for each question.
+
+    Mirrors `run_pipeline_for_all` but uses `run_agent()` instead of
+    `RAGPipeline.run()`. Cache is disabled during eval to get true metrics.
+    """
+    done = {r["question"] for r in existing}
+    records = list(existing)
+
+    pending = [qa for qa in questions if qa["question"] not in done]
+    if not pending:
+        console.print("  [green]All agent records already exist — skipping Step 1.[/green]")
+        return records
+
+    if done:
+        console.print(
+            f"  [yellow]Resuming: {len(done)} already done, "
+            f"{len(pending)} remaining.[/yellow]"
+        )
+
+    total = len(questions)
+    for qa in pending:
+        i = len(records) + 1
+        q = qa["question"]
+        console.print(f"  [{i:02d}/{total}] {q[:70]}...")
+
+        t0 = time.time()
+        state = run_agent(q, use_cache=False)
+        latency_ms = (time.time() - t0) * 1000
+
+        # Extract contexts from retrieved_chunks (same format eval scorer expects)
+        chunks = state.get("retrieved_chunks") or []
+        # Dedup by chunk_id for contexts
+        seen_cids: set[str] = set()
+        contexts: list[str] = []
+        for c in chunks:
+            cid = str(c.get("chunk_id", ""))
+            if cid not in seen_cids:
+                seen_cids.add(cid)
+                contexts.append(str(c.get("text", "")))
+
+        record = {
+            "question":        q,
+            "answer":          state.get("synthesis") or "(no answer)",
+            "confidence":      "high" if (state.get("confidence_score") or 0) >= 0.8
+                               else "medium" if (state.get("confidence_score") or 0) >= 0.5
+                               else "low",
+            "contexts":        contexts,
+            "reference":       qa.get("answer", ""),
+            "source":          qa.get("source", "?"),
+            "type":            qa.get("type", "?"),
+            "chunk_id":        qa.get("chunk_id"),
+            "latency_ms":      latency_ms,
+            "stage_latencies": {
+                "replan_count": state.get("replan_count", 0),
+                "n_sub_queries": len(state.get("sub_queries") or []),
+                "n_chunks_raw": len(chunks),
+            },
+        }
+        records.append(record)
+        _save_checkpoint(out_path, records)
 
     return records
 
@@ -340,6 +415,8 @@ def main():
                         help="Enable Neo4j graph traversal (Phase 3 Step 3)")
     parser.add_argument("--skip-pipeline", action="store_true",
                         help="Reuse existing pipeline output (only re-run RAGAS scoring)")
+    parser.add_argument("--agent",         action="store_true",
+                        help="Use LangGraph agentic pipeline (Phase 4) instead of naive RAG")
     parser.add_argument("--fresh",         action="store_true",
                         help="Ignore any existing checkpoint and start from scratch")
     parser.add_argument("--out",           type=Path, default=None,
@@ -364,11 +441,14 @@ def main():
 
     synthesis_model = "claude-haiku-4-5-20251001"
 
-    mode_parts = ["hybrid(dense+BM25+RRF)"]
-    if args.rerank:
-        mode_parts.append("+Cohere-rerank")
-    if args.graph:
-        mode_parts.append("+graph")
+    if args.agent:
+        mode_parts = ["LangGraph-agent(haiku)"]
+    else:
+        mode_parts = ["hybrid(dense+BM25+RRF)"]
+        if args.rerank:
+            mode_parts.append("+Cohere-rerank")
+        if args.graph:
+            mode_parts.append("+graph")
     mode_label = " ".join(mode_parts)
 
     console.print(f"\n[bold cyan]PaperMind — RAGAS Eval[/bold cyan]")
@@ -391,6 +471,10 @@ def main():
     if args.skip_pipeline and existing_records:
         console.print("[yellow]--skip-pipeline: reusing existing pipeline outputs[/yellow]")
         records = existing_records[:len(questions)]
+    elif args.agent:
+        console.print("[bold]Step 1:[/bold] Running LangGraph agent on all questions...")
+        records = run_agent_for_all(questions, existing_records, OUT_PATH)
+        console.print(f"  [dim]Agent outputs saved → {OUT_PATH}[/dim]\n")
     else:
         console.print("[bold]Step 1:[/bold] Running RAG pipeline on all questions...")
         # Cohere trial key: 10 req/min → need ≥6 s between rerank calls.

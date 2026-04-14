@@ -20,6 +20,8 @@ from query.state import PaperMindState
 
 
 DEFAULT_PARSED_DIR = Path("data/parsed")
+# Planner uses Sonnet — query decomposition is reasoning-heavy work.
+# Override with PAPERMIND_PLANNER_MODEL env var if needed.
 PLANNER_MODEL = os.getenv("PAPERMIND_PLANNER_MODEL", "claude-haiku-4-5-20251001")
 
 
@@ -53,25 +55,30 @@ def load_paper_titles(parsed_dir: Path = DEFAULT_PARSED_DIR, limit: int = 10) ->
     return titles
 
 
-_SYSTEM = """You are the PaperMind Research Planner. Your goal is to decompose complex research inquiries into a multi-step search strategy for a corpus of 10 technical papers.
+_SYSTEM = """You are the PaperMind Research Planner. Your goal is to decompose research questions into a minimal, targeted search strategy for a corpus of 10 technical papers.
 
 **YOUR MISSION:**
-Transform a single user question into surgical sub-queries that will be executed across a hybrid (Vector + BM25) retrieval system. Your search plan must enable cross-document synthesis.
+Transform a user question into the fewest surgical sub-queries needed to retrieve the answer. Retrieval is expensive — every extra sub-query adds 5 noisy chunks. Be precise, not exhaustive.
+
+**QUERY COUNT RULES (hard limits — do not exceed):**
+- Simple factoid (single fact, single paper): 2-3 sub-queries max
+- Methodology / explanation (single paper): 3-4 sub-queries max
+- Comparison or synthesis across 2 papers: 4-5 sub-queries max (2 per paper + 1 synthesis angle)
+- Broad cross-paper synthesis (3+ papers): 5-6 sub-queries max
 
 **SEARCH STRATEGY GUIDELINES:**
-1. **Target the "How":** Don't just search for names; search for methodologies, algorithms, and experimental setups (e.g., "implementation details of [Method]", "statistical significance of [Result]").
-2. **Isolate Variables:** If comparing two things, create separate queries for each to avoid "query muddying."
-3. **Keyword Density:** Include specific technical terms, units of measure, or standard nomenclature that a researcher would use (e.g., "p-value," "latency in ms," "O(n) complexity").
-4. **Structural Anchors:** Target specific document sections. If you know a claim likely lives in a certain paper, include the paper title in the sub-query (e.g., "Paper xRouter evaluation section results table"). Also use section-specific keywords to find data where it lives (e.g., "Ablation study," "Related works," "Table 1 results," "Proposed framework").
-5. **Conflict Discovery:** If the query implies a tension, search for the specific limitations or boundary conditions of each paper's claims.
+1. **Target the "How":** Search for methodologies and experimental setups, not just names.
+2. **Isolate Variables:** For comparisons, one sub-query per paper being compared.
+3. **Keyword Density:** Include specific technical terms the paper would use verbatim.
+4. **Structural Anchors:** Use section-specific keywords to find data where it lives (e.g., "results table", "ablation study", "limitations section").
+5. **Stop when you have enough:** If 2 sub-queries cover the question, use 2.
 
 **CONSTRAINTS:**
-- Output MUST be a valid JSON list of strings. 
+- Output MUST be a valid JSON list of strings.
 - Format: ["query 1", "query 2", "query 3"]
 - No preamble, no markdown formatting, no explanations.
-- Each query should be 5-12 words.
-- Use distinct angles for each query to maximize context recall.
-- Diversity Constraint: Each sub-query in the JSON list must target a distinctly different semantic aspect of the query. Do not repeat terms across sub-queries unless they are the primary subject.
+- Each query: 5-15 words.
+- Maximum 6 sub-queries under any circumstances.
 """
 
 
@@ -102,13 +109,14 @@ def planner_node(state: PaperMindState) -> PaperMindState:
     """
     LangGraph node: plans `sub_queries` from `state["query"]`.
 
-    Reads paper titles from `data/parsed/` and includes them in the prompt so the
-    model knows the corpus universe.
+    Reads `max_sub_queries` set by the classifier node (Adaptive-RAG pattern)
+    and enforces it as a hard cap in both the prompt and post-processing.
     """
     query = state["query"]
+    # Hard cap set by classifier_node. Default 4 if classifier didn't run.
+    max_sq = int(state.get("max_sub_queries") or 4)
     titles = load_paper_titles(limit=10)
 
-    # If no titles, prompt more broadly. If titles exist, be surgical.
     universe_context = (
         "Available papers (titles):\n" + "\n".join(f"- {t}" for t in titles)
         if titles
@@ -118,6 +126,8 @@ def planner_node(state: PaperMindState) -> PaperMindState:
     user = (
         f"Universe: {universe_context}\n\n"
         f"User question: {query}\n\n"
+        f"HARD LIMIT: Generate exactly {max_sq} sub-queries or fewer. "
+        f"Do NOT exceed {max_sq}. "
         "Return ONLY a JSON list of surgical retrieval search strings."
     )
 
@@ -130,7 +140,7 @@ def planner_node(state: PaperMindState) -> PaperMindState:
     )
 
     raw = resp.content[0].text
-    sub_queries = _parse_json_list(raw)
+    sub_queries = _parse_json_list(raw)[:max_sq]  # hard truncate as backstop
 
     return {
         **state,
