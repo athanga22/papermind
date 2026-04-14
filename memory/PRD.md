@@ -55,9 +55,16 @@ Build the frontend for PaperMind, an agentic RAG system for deep cross-document 
   - **Agent Trace**: Sub-query decomposition list + pipeline execution stages + RAGAS context
 
 ## What's Been Implemented
-- [2025-01-xx] All 4 pages built and tested
-- [2025-01-xx] Mock data: 6 papers, 2 conversations, 9 messages, 11 retrieved chunks
-- [2025-01-xx] Bug fix: Answer detail shows correct preceding question in multi-turn conversations
+
+### Session 1 — MVP (4 pages)
+- Landing page, Paper Library, Chat Interface, Answer Detail
+- 6 mock papers from DESIGN.md, 2 conversations with full mock answers
+- Inline citation pills, confidence badges, agent trace accordions
+
+### Session 2 — Streaming + About
+- **Token-by-token streaming** in chat: thinking phase → character-by-character reveal with blinking cursor → metadata reveal on completion
+- **Removed all eval numbers** from user-facing UI (landing, chat, detail pages)
+- **About page (`/about`)**: Full architecture & evaluation documentation — 8 sections, TOC sidebar, 7-step ingestion pipeline, RAGAS progression table (6 phases), 4 design decisions, 4 known tradeoffs
 
 ## Prioritized Backlog
 
