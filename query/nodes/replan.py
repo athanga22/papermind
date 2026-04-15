@@ -23,6 +23,7 @@ import re
 from typing import Any
 
 import anthropic
+from langgraph.config import get_stream_writer
 
 from query.state import PaperMindState
 
@@ -65,6 +66,7 @@ def _parse_json_list(text: str) -> list[str]:
 
 
 def replan_node(state: PaperMindState) -> dict[str, Any]:
+    get_stream_writer()({"type": "progress", "node": "replan", "message": "Retrieval insufficient — replanning..."})
     replan_count = int(state.get("replan_count") or 0) + 1
     query = state.get("query") or ""
     prior_sub_queries = list(state.get("sub_queries") or [])

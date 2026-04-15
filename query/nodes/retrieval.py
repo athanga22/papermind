@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from langgraph.config import get_stream_writer
+
 from query.retriever import TrimodalRetriever
 from query.state import PaperMindState
 
@@ -54,6 +56,7 @@ def retrieve_one_node(state: PaperMindState) -> dict[str, Any]:
         return {"retrieved_chunks": [], "failed_sub_queries": []}
 
     sub_query = sub_queries[0]
+    get_stream_writer()({"type": "progress", "node": "retrieve", "message": f"Retrieving: {sub_query[:60]}"})
 
     try:
         with TrimodalRetriever() as retriever:

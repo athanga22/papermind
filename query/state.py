@@ -31,11 +31,22 @@ def _chunks_reducer(existing: list, update: Any) -> list:
     return list(existing or [])
 
 
+def _latencies_reducer(existing: dict, update: dict) -> dict:
+    """Merge stage_latencies dicts. Later writes overwrite earlier ones (last-write wins)."""
+    return {**(existing or {}), **(update or {})}
+
+
 class PaperMindState(TypedDict):
     query: str
     # Set by classifier_node (Adaptive-RAG pattern). Planner reads this as a
-    # hard cap on sub-query count. Values: 2 (simple), 4 (moderate), 6 (complex).
+    # hard cap on sub-query count. Values: 2 (simple), 4 (comparison),
+    # 4 (moderate), 5 (synthesis).
     max_sub_queries: int
+    # Set by classifier_node for comparison queries: the paper titles (as they
+    # appear in the corpus) that the question explicitly names. Planner uses
+    # these as lexical anchors to force per-paper sub-queries so retrieval
+    # covers both papers instead of whichever has denser keyword overlap.
+    target_papers: List[str]
     sub_queries: List[str]
     retrieved_chunks: Annotated[List[dict], _chunks_reducer]
     # failed_sub_queries is also populated from parallel branches.
@@ -43,3 +54,6 @@ class PaperMindState(TypedDict):
     replan_count: int
     synthesis: str
     confidence_score: float
+    # Per-node wall-clock timings in ms. Each node merges its own entry.
+    # retrieve_ms = slowest parallel branch (≈ fan-out wall time).
+    stage_latencies: Annotated[dict, _latencies_reducer]

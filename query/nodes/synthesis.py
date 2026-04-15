@@ -20,14 +20,19 @@ import re
 from typing import Any
 
 import anthropic
+from langgraph.config import get_stream_writer
 
 from query.state import PaperMindState
 
 
-# Agent synthesis uses Sonnet — cross-paper synthesis is reasoning-heavy.
-# Override with PAPERMIND_SYNTHESIS_MODEL env var if needed.
-SYNTHESIS_MODEL = os.getenv("PAPERMIND_SYNTHESIS_MODEL", "claude-haiku-4-5-20251001")
-MAX_TOKENS = int(os.getenv("PAPERMIND_SYNTHESIS_MAX_TOKENS", "900"))
+# Synthesis uses claude-sonnet-4-5 — faithfulness on cross-paper comparisons
+# dropped to 0.776 with Haiku (over-inference on partial context). Sonnet is
+# more conservative about citing claims it can't ground. claude-sonnet-4-5-20250929
+# is the cheaper sonnet tier; override with PAPERMIND_SYNTHESIS_MODEL if needed.
+SYNTHESIS_MODEL = os.getenv("PAPERMIND_SYNTHESIS_MODEL", "claude-sonnet-4-5-20250929")
+# 450 tokens ≈ 300-350 words — enough for a well-cited comparative answer.
+# Raising this to 900 inflated Sonnet synthesis latency to 14-15s; 450 targets ~7s.
+MAX_TOKENS = int(os.getenv("PAPERMIND_SYNTHESIS_MAX_TOKENS", "450"))
 # Hard cap on chunks sent to synthesis. With 5 chunks per sub-query and up to 6
 # sub-queries, deduped chunks can still reach 20-30. Beyond ~20, synthesis quality
 # degrades — too much noise, answer relevancy drops.
@@ -36,6 +41,10 @@ MAX_SYNTHESIS_CHUNKS = int(os.getenv("PAPERMIND_SYNTHESIS_MAX_CHUNKS", "20"))
 
 _SYSTEM = """\
 You are PaperMind, a precise research synthesis assistant.
+
+Your PRIMARY obligation is to directly answer the specific question asked. \
+Do not summarize the retrieved sources — use them as evidence to answer the question. \
+Structure your response around what the question is asking, not around what the documents say.
 
 You MUST answer using ONLY the provided <doc> sources.
 
@@ -106,22 +115,33 @@ def synthesis_node(state: PaperMindState) -> dict[str, Any]:
     user = (
         f"<question>{query}</question>\n\n"
         f"<sources>\n{docs}\n</sources>\n\n"
-        "Write a concise, well-structured answer. "
+        "Write a direct, well-structured answer in 3 paragraphs or fewer (under 250 words). "
         "Cite each claim inline using [doc N]."
     )
 
+    write = get_stream_writer()
+    write({"type": "progress", "node": "synthesize", "message": "Synthesizing answer..."})
+
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    resp = client.messages.create(
+    parts: list[str] = []
+
+    # Use Anthropic's streaming API so tokens are forwarded to the SSE stream
+    # in real time. Falls back gracefully to a no-op writer when called from
+    # run_agent() (eval / non-streaming path) — get_stream_writer() returns a
+    # no-op in that context.
+    with client.messages.stream(
         model=SYNTHESIS_MODEL,
         max_tokens=MAX_TOKENS,
         system=_SYSTEM,
         messages=[{"role": "user", "content": user}],
-    )
+    ) as stream:
+        for text in stream.text_stream:
+            write({"type": "token", "content": text})
+            parts.append(text)
 
-    raw = resp.content[0].text
+    raw    = "".join(parts)
     answer = _strip_confidence_json(raw)
-    # Keep confidence JSON requirement enforced, but only store synthesis in state for now.
-    _ = _parse_confidence(raw)
+    _      = _parse_confidence(raw)
 
     return {"synthesis": answer}
 

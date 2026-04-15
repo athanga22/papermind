@@ -25,6 +25,7 @@ Entry point:
 
 from __future__ import annotations
 
+import functools
 import time
 from pathlib import Path
 from typing import Any, List
@@ -46,10 +47,35 @@ from query.state import PaperMindState
 from query.tracing import get_client as get_tracer
 
 
+def _timed(name: str, fn):
+    """
+    Wrap a LangGraph node function with wall-clock timing.
+    Records `{name}_ms` into `stage_latencies` in the returned state update.
+    For parallel nodes (retrieve_one), all branches write `retrieve_ms` —
+    last-write wins, which approximates the fan-out wall time.
+    """
+    @functools.wraps(fn)
+    def wrapper(state):
+        t0 = time.perf_counter()
+        result = fn(state)
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        if isinstance(result, dict):
+            existing = result.get("stage_latencies") or {}
+            result["stage_latencies"] = {**existing, f"{name}_ms": ms}
+        return result
+    return wrapper
+
+
 def dispatch_retrieval(state: PaperMindState) -> List[Send]:
     """
     Fan-out dispatcher: one parallel retrieve_one per sub-query.
     Used as a routing function in conditional_edges (not a node).
+
+    LangGraph executes all Send() branches concurrently (thread-pool).
+    For a 4-sub-query comparison (2 per paper), all 4 retrievals run in
+    parallel — paper A and paper B are fetched simultaneously, not serially.
+    Retrieved chunks are merged by the _chunks_reducer in state.py before
+    rerank_node runs.
     """
     sub_queries = list(state.get("sub_queries") or [])
     return [Send("retrieve_one", {"sub_queries": [sq]}) for sq in sub_queries]
@@ -58,13 +84,13 @@ def dispatch_retrieval(state: PaperMindState) -> List[Send]:
 def build_app():
     workflow = StateGraph(PaperMindState)
 
-    workflow.add_node("classifier", classifier_node)
-    workflow.add_node("planner", planner_node)
-    workflow.add_node("retrieve_one", retrieve_one_node)
-    workflow.add_node("rerank", rerank_node)
-    workflow.add_node("gate", gate_node)
-    workflow.add_node("replan", replan_node)
-    workflow.add_node("synthesize", synthesis_node)
+    workflow.add_node("classifier", _timed("classifier", classifier_node))
+    workflow.add_node("planner",    _timed("planner",    planner_node))
+    workflow.add_node("retrieve_one", _timed("retrieve", retrieve_one_node))
+    workflow.add_node("rerank",     _timed("rerank",     rerank_node))
+    workflow.add_node("gate",       _timed("gate",       gate_node))
+    workflow.add_node("replan",     _timed("replan",     replan_node))
+    workflow.add_node("synthesize", _timed("synthesis",  synthesis_node))
 
     # classifier -> planner -> fan-out retrieve
     workflow.set_entry_point("classifier")
@@ -92,6 +118,22 @@ def build_app():
 app = build_app()
 
 
+def initial_state_for(query: str) -> PaperMindState:
+    """Return a clean initial state dict for the given query."""
+    return {
+        "query":              query,
+        "max_sub_queries":    4,
+        "target_papers":      [],
+        "sub_queries":        [],
+        "retrieved_chunks":   [],
+        "failed_sub_queries": [],
+        "replan_count":       0,
+        "synthesis":          "",
+        "confidence_score":   0.0,
+        "stage_latencies":    {},
+    }
+
+
 def run_agent(
     query: str,
     session_id: str | None = None,
@@ -117,16 +159,7 @@ def run_agent(
             cache = None
 
     # ── Full pipeline run ─────────────────────────────────────────────────
-    initial_state: PaperMindState = {
-        "query": query,
-        "max_sub_queries": 4,   # overwritten by classifier_node
-        "sub_queries": [],
-        "retrieved_chunks": [],
-        "failed_sub_queries": [],
-        "replan_count": 0,
-        "synthesis": "",
-        "confidence_score": 0.0,
-    }
+    initial_state: PaperMindState = initial_state_for(query)
 
     lf = get_tracer()
     t0 = time.perf_counter()

@@ -77,7 +77,8 @@ from query.tracing import shutdown as langfuse_shutdown
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-GOLDEN_PATH = Path("docs/golden_set_silver.json")
+SINGLE_PATH = Path("test set/single_paper.json")
+CROSS_PATH  = Path("test set/cross_paper.json")
 
 # ── Concurrency ───────────────────────────────────────────────────────────────
 
@@ -239,6 +240,14 @@ def run_agent_for_all(
                 seen_cids.add(cid)
                 contexts.append(str(c.get("text", "")))
 
+        # Merge real per-node timings with pipeline metadata
+        node_lats = dict(state.get("stage_latencies") or {})
+        node_lats.update({
+            "replan_count":  state.get("replan_count", 0),
+            "n_sub_queries": len(state.get("sub_queries") or []),
+            "n_chunks_raw":  len(chunks),
+        })
+
         record = {
             "question":        q,
             "answer":          state.get("synthesis") or "(no answer)",
@@ -251,11 +260,7 @@ def run_agent_for_all(
             "type":            qa.get("type", "?"),
             "chunk_id":        qa.get("chunk_id"),
             "latency_ms":      latency_ms,
-            "stage_latencies": {
-                "replan_count": state.get("replan_count", 0),
-                "n_sub_queries": len(state.get("sub_queries") or []),
-                "n_chunks_raw": len(chunks),
-            },
+            "stage_latencies": node_lats,
         }
         records.append(record)
         _save_checkpoint(out_path, records)
@@ -407,42 +412,85 @@ def latency_stats(scored: list[dict]) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--subset",        choices=["all", "single", "cross"], default="all")
-    parser.add_argument("--n",             type=int, default=None)
-    parser.add_argument("--rerank",        action="store_true",
+    parser.add_argument("--subset",             choices=["all", "single", "cross"], default="all")
+    parser.add_argument("--n",                  type=int, default=None)
+    parser.add_argument("--rerank",             action="store_true",
                         help="Enable Cohere cross-encoder reranking (Phase 3 Step 2)")
-    parser.add_argument("--graph",         action="store_true",
+    parser.add_argument("--graph",              action="store_true",
                         help="Enable Neo4j graph traversal (Phase 3 Step 3)")
-    parser.add_argument("--skip-pipeline", action="store_true",
+    parser.add_argument("--skip-pipeline",      action="store_true",
                         help="Reuse existing pipeline output (only re-run RAGAS scoring)")
-    parser.add_argument("--agent",         action="store_true",
+    parser.add_argument("--agent",              action="store_true",
                         help="Use LangGraph agentic pipeline (Phase 4) instead of naive RAG")
-    parser.add_argument("--fresh",         action="store_true",
+    parser.add_argument("--fresh",              action="store_true",
                         help="Ignore any existing checkpoint and start from scratch")
-    parser.add_argument("--out",           type=Path, default=None,
+    parser.add_argument("--include-unreviewed", action="store_true",
+                        help="Include cross-paper items flagged reviewed=false")
+    parser.add_argument("--out",                type=Path, default=None,
                         help="Override output JSON path")
     args = parser.parse_args()
 
     OUT_PATH, OUT_LOG = _output_paths(args)
 
     # ── Load questions ────────────────────────────────────────────────────────
-    with open(GOLDEN_PATH) as f:
-        golden = json.load(f)
+    def _load_and_normalise(path: Path, source_tag: str) -> list[dict]:
+        """
+        Load one of the two test-set JSONs and normalise to the internal shape
+        expected by the rest of the harness:
+          - question, answer, source, type, reviewed
+          - chunk_id   → always a list (may be empty)
+          - paper_ids  → always a list
+        """
+        with open(path) as f:
+            items = json.load(f)
+        out = []
+        for item in items:
+            # chunk_id is a string on single-paper, a list on cross-paper
+            cid = item.get("chunk_id")
+            if isinstance(cid, str):
+                cid = [cid] if cid else []
+            elif not isinstance(cid, list):
+                cid = []
+
+            # paper_ids: cross-paper has plural list; single-paper has singular string
+            pids = item.get("paper_ids") or (
+                [item["paper_id"]] if item.get("paper_id") else []
+            )
+
+            out.append({
+                "question":     item["question"],
+                "answer":       item.get("answer", ""),
+                "source":       source_tag,
+                "type":         item.get("type", "unknown"),
+                "reviewed":     item.get("reviewed", True),
+                "chunk_id":     cid,
+                "paper_ids":    pids,
+            })
+        return out
+
+    single_qs = _load_and_normalise(SINGLE_PATH, "single_paper")
+    cross_qs  = _load_and_normalise(CROSS_PATH,  "cross_paper")
+
+    # Filter unreviewed cross-paper items unless caller opts in
+    if not args.include_unreviewed:
+        cross_qs = [q for q in cross_qs if q["reviewed"]]
 
     if args.subset == "single":
-        questions = [q for q in golden if q["source"] == "single_paper"]
+        questions = single_qs
     elif args.subset == "cross":
-        questions = [q for q in golden if q["source"] == "cross_paper"]
+        questions = cross_qs
     else:
-        questions = golden
+        questions = single_qs + cross_qs
 
     if args.n:
         questions = questions[:args.n]
 
-    synthesis_model = "claude-haiku-4-5-20251001"
+    synthesis_model = os.getenv("PAPERMIND_SYNTHESIS_MODEL", "claude-sonnet-4-5-20250929")
 
     if args.agent:
-        mode_parts = ["LangGraph-agent(haiku)"]
+        # Shorten model name for display: "claude-sonnet-4-5-..." → "sonnet-4-5"
+        _parts = synthesis_model.replace("claude-", "").split("-20")[0]
+        mode_parts = [f"LangGraph-agent({_parts})"]
     else:
         mode_parts = ["hybrid(dense+BM25+RRF)"]
         if args.rerank:
@@ -455,7 +503,12 @@ def main():
     console.print(
         f"Mode: {mode_label} | Questions: {len(questions)} | "
         f"subset={args.subset} | n={args.n or 'all'} | "
-        f"synthesis={synthesis_model}\n"
+        f"synthesis={synthesis_model}"
+    )
+    reviewed_note = "reviewed only" if not args.include_unreviewed else "incl. unreviewed"
+    console.print(
+        f"Golden set: {len(single_qs)} single-paper | "
+        f"{len(cross_qs)} cross-paper ({reviewed_note})\n"
     )
     console.print(f"[dim]Output → {OUT_PATH}[/dim]\n")
 
@@ -561,8 +614,10 @@ def main():
         str(lats.get("total_p50_ms", "—")),
         str(lats.get("total_p95_ms", "—")),
     )
-    for key in ("embed_ms", "dense_ms", "bm25_ms", "graph_ms",
-                "fetch_ms", "rerank_ms", "synthesize_ms"):
+    for key in ("classifier_ms", "planner_ms", "retrieve_ms",
+                "rerank_ms", "gate_ms", "replan_ms", "synthesis_ms",
+                # naive pipeline stages (kept for --agent=False runs)
+                "embed_ms", "dense_ms", "bm25_ms", "graph_ms", "fetch_ms"):
         p50 = lats.get(f"{key}_p50")
         p95 = lats.get(f"{key}_p95")
         if p50 is not None:

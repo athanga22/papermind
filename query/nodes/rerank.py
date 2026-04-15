@@ -28,6 +28,8 @@ import os
 import time
 from typing import Any
 
+from langgraph.config import get_stream_writer
+
 from query.state import PaperMindState
 
 RERANK_TOP_N = int(os.getenv("PAPERMIND_RERANK_TOP_N", "20"))
@@ -58,6 +60,7 @@ def rerank_node(state: PaperMindState) -> dict[str, Any]:
     Writes back to `retrieved_chunks` — downstream nodes (gate, synthesis) see
     only the top-ranked chunks.
     """
+    get_stream_writer()({"type": "progress", "node": "rerank", "message": "Ranking results..."})
     query = state.get("query") or ""
     raw_chunks = list(state.get("retrieved_chunks") or [])
     deduped = _dedup(raw_chunks)
