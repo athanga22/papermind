@@ -31,6 +31,7 @@ from pydantic import BaseModel
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from query.agent import app as graph, initial_state_for  # noqa: E402  (after dotenv)
+from api.papers import router as papers_router  # noqa: E402
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -43,6 +44,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(papers_router)
 
 
 # ── Request / response models ─────────────────────────────────────────────────

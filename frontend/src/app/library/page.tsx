@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import Link from 'next/link'
 import {
@@ -16,17 +16,28 @@ import {
   Layers,
   ChevronRight,
   AlertCircle,
+  Loader2,
 } from 'lucide-react'
-import { MOCK_PAPERS, type Paper } from '@/lib/mock-data'
+import { listPapers, uploadPaper, deletePaper, type Paper } from '@/lib/api'
 
 export default function LibraryPage() {
-  const [papers, setPapers] = useState<Paper[]>(MOCK_PAPERS)
+  const [papers, setPapers] = useState<Paper[]>([])
+  const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
 
   const MAX_PAPERS = 10
 
+  // ── Load papers on mount ───────────────────────────────────────────────────
+  useEffect(() => {
+    listPapers()
+      .then(setPapers)
+      .catch((err) => setUploadError(`Failed to load papers: ${err.message}`))
+      .finally(() => setLoading(false))
+  }, [])
+
+  // ── Upload ─────────────────────────────────────────────────────────────────
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       setUploadError(null)
@@ -38,29 +49,29 @@ export default function LibraryPage() {
       const filesToAdd = acceptedFiles.slice(0, remaining)
       setUploading(true)
 
-      // Simulate ingestion
-      setTimeout(() => {
-        const newPapers: Paper[] = filesToAdd.map((f, i) => ({
-          id: `new_${Date.now()}_${i}`,
-          title: f.name.replace('.pdf', '').replace(/_/g, ' '),
-          shortTitle: f.name.replace('.pdf', '').split('_')[0],
-          authors: ['Author et al.'],
-          year: 2024,
-          venue: 'Uploaded',
-          chunkCount: Math.floor(Math.random() * 80) + 40,
-          sections: ['Abstract', 'Introduction', 'Methods', 'Results', 'Conclusion'],
-          fileSize: `${(f.size / 1024 / 1024).toFixed(1)} MB`,
-          addedAt: new Date().toISOString().split('T')[0],
-          abstract: 'Paper being processed — metadata will be extracted after ingestion.',
-        }))
-        setPapers((prev) => [...prev, ...newPapers])
-        setUploading(false)
+      // Upload sequentially — ingestion is blocking on the backend
+      ;(async () => {
+        const added: Paper[] = []
+        for (const f of filesToAdd) {
+          try {
+            const paper = await uploadPaper(f)
+            added.push(paper)
+            setPapers((prev) => {
+              // Avoid duplicates if paper was already indexed
+              const exists = prev.some((p) => p.id === paper.id)
+              return exists ? prev.map((p) => (p.id === paper.id ? paper : p)) : [...prev, paper]
+            })
+          } catch (err: unknown) {
+            setUploadError((err as Error).message ?? 'Upload failed')
+          }
+        }
         if (acceptedFiles.length > remaining) {
           setUploadError(
             `Only ${remaining} paper${remaining !== 1 ? 's' : ''} were added (limit: ${MAX_PAPERS}).`
           )
         }
-      }, 1400)
+        setUploading(false)
+      })()
     },
     [papers.length]
   )
@@ -68,15 +79,23 @@ export default function LibraryPage() {
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
-    disabled: uploading || papers.length >= MAX_PAPERS,
+    disabled: uploading || loading || papers.length >= MAX_PAPERS,
   })
 
-  const handleRemove = (id: string) => {
+  // ── Remove ─────────────────────────────────────────────────────────────────
+  const handleRemove = async (id: string) => {
     setRemovingId(id)
-    setTimeout(() => {
-      setPapers((prev) => prev.filter((p) => p.id !== id))
+    try {
+      await deletePaper(id)
+      // Small delay so the fade-out animation plays
+      setTimeout(() => {
+        setPapers((prev) => prev.filter((p) => p.id !== id))
+        setRemovingId(null)
+      }, 300)
+    } catch (err: unknown) {
+      setUploadError((err as Error).message ?? 'Remove failed')
       setRemovingId(null)
-    }, 300)
+    }
   }
 
   return (
@@ -135,7 +154,7 @@ export default function LibraryPage() {
               ? 'border-zinc-500 bg-zinc-900/60'
               : isDragReject
               ? 'border-red-800 bg-red-950/20'
-              : papers.length >= MAX_PAPERS || uploading
+              : papers.length >= MAX_PAPERS || uploading || loading
               ? 'border-zinc-800 bg-transparent opacity-50 cursor-not-allowed'
               : 'border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900/40'
             }
@@ -145,7 +164,7 @@ export default function LibraryPage() {
           {uploading ? (
             <>
               <div className="w-8 h-8 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin mb-4" />
-              <p className="text-sm text-zinc-400">Parsing and indexing papers…</p>
+              <p className="text-sm text-zinc-400">Parsing and indexing paper…</p>
               <p className="text-xs text-zinc-600 mt-1 font-mono">chunking · embedding · BM25</p>
             </>
           ) : (
@@ -163,7 +182,7 @@ export default function LibraryPage() {
           )}
         </div>
 
-        {/* Upload error */}
+        {/* Upload/API error */}
         {uploadError && (
           <div
             data-testid="upload-error"
@@ -174,8 +193,13 @@ export default function LibraryPage() {
           </div>
         )}
 
-        {/* Papers list */}
-        {papers.length === 0 ? (
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-zinc-600">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            <span className="text-sm">Loading corpus…</span>
+          </div>
+        ) : papers.length === 0 ? (
           <div
             data-testid="empty-library"
             className="text-center py-20 text-zinc-600"
@@ -257,8 +281,6 @@ function PaperCard({
   isRemoving: boolean
   onRemove: () => void
 }) {
-  const [showAbstract, setShowAbstract] = useState(false)
-
   return (
     <div
       data-testid={`paper-card-${paper.id}`}
@@ -294,55 +316,42 @@ function PaperCard({
 
       {/* Metadata row */}
       <div className="flex flex-wrap items-center gap-3 mb-3 font-mono text-xs text-zinc-600">
-        <span className="flex items-center gap-1">
-          <Users className="w-3 h-3" />
-          {paper.authors.slice(0, 2).join(', ')}
-          {paper.authors.length > 2 && ` +${paper.authors.length - 2}`}
-        </span>
-        <span className="flex items-center gap-1">
-          <Calendar className="w-3 h-3" />
-          {paper.year}
-        </span>
+        {paper.authors.length > 0 && (
+          <span className="flex items-center gap-1">
+            <Users className="w-3 h-3" />
+            {paper.authors.slice(0, 2).join(', ')}
+            {paper.authors.length > 2 && ` +${paper.authors.length - 2}`}
+          </span>
+        )}
+        {paper.year && (
+          <span className="flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {paper.year}
+          </span>
+        )}
         <span className="flex items-center gap-1">
           <Layers className="w-3 h-3" />
           {paper.chunkCount} chunks
         </span>
-        <span className="px-1.5 py-0.5 bg-zinc-800 rounded text-zinc-500">{paper.venue}</span>
       </div>
 
       {/* Sections */}
-      <div className="flex flex-wrap gap-1 mb-3">
-        {paper.sections.slice(0, 5).map((s) => (
-          <span
-            key={s}
-            className="px-1.5 py-0.5 text-zinc-600 text-xs font-mono bg-zinc-950 border border-zinc-800/60 rounded"
-          >
-            {s}
-          </span>
-        ))}
-        {paper.sections.length > 5 && (
-          <span className="px-1.5 py-0.5 text-zinc-700 text-xs font-mono">
-            +{paper.sections.length - 5}
-          </span>
-        )}
-      </div>
-
-      {/* Abstract toggle */}
-      <button
-        onClick={() => setShowAbstract(!showAbstract)}
-        data-testid={`paper-abstract-toggle-${paper.id}`}
-        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors font-mono"
-      >
-        {showAbstract ? '↑ hide abstract' : '↓ show abstract'}
-      </button>
-
-      {showAbstract && (
-        <p
-          className="mt-2 text-xs text-zinc-500 leading-relaxed border-t border-zinc-800 pt-2"
-          data-testid={`paper-abstract-${paper.id}`}
-        >
-          {paper.abstract}
-        </p>
+      {paper.sections.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {paper.sections.slice(0, 5).map((s) => (
+            <span
+              key={s}
+              className="px-1.5 py-0.5 text-zinc-600 text-xs font-mono bg-zinc-950 border border-zinc-800/60 rounded"
+            >
+              {s}
+            </span>
+          ))}
+          {paper.sections.length > 5 && (
+            <span className="px-1.5 py-0.5 text-zinc-700 text-xs font-mono">
+              +{paper.sections.length - 5}
+            </span>
+          )}
+        </div>
       )}
     </div>
   )

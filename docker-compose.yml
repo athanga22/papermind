@@ -1,4 +1,40 @@
 services:
+  # ── FastAPI backend ───────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data        # papers, bm25 index, parsed cache
+      - ./api:/app/api
+      - ./query:/app/query
+      - ./ingestion:/app/ingestion
+    env_file: .env
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Next.js frontend ──────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   # ── Vector store ──────────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:v1.16.1

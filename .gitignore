@@ -17,6 +17,7 @@ env/
 .env.local
 .env.*
 *.env
+!.env.example
 
 # Data (PDFs are large and potentially proprietary)
 data/papers/

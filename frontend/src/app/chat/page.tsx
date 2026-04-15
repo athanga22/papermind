@@ -16,12 +16,34 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react'
-import { MOCK_PAPERS, MOCK_CONVERSATIONS, type Message, type Conversation } from '@/lib/mock-data'
+import { listPapers, streamQuery, type Paper, type ConfidenceLevel } from '@/lib/api'
 import { formatRelativeTime, formatMs } from '@/lib/utils'
+
+// ── Local types ───────────────────────────────────────────────────────────────
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  confidence?: ConfidenceLevel
+  subQueries?: string[]
+  replanCount?: number
+  processingMs?: number
+  cacheHit?: boolean
+  isError?: boolean
+}
+
+interface Conversation {
+  id: string
+  title: string
+  createdAt: string
+  messages: Message[]
+}
 
 // ── Confidence badge ─────────────────────────────────────────────────────────
 
-function ConfidenceBadge({ level }: { level: 'high' | 'medium' | 'low' }) {
+function ConfidenceBadge({ level }: { level: ConfidenceLevel }) {
   const styles = {
     high: 'text-green-400 border-green-900/60 bg-green-950/20',
     medium: 'text-amber-400 border-amber-900/60 bg-amber-950/20',
@@ -117,6 +139,17 @@ function MessageBubble({
     )
   }
 
+  if (message.isError) {
+    return (
+      <div className="flex gap-3" data-testid="message-error">
+        <div className="w-6 h-6 rounded-md border border-red-900 bg-red-950/20 flex items-center justify-center flex-shrink-0 mt-1">
+          <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+        </div>
+        <p className="text-sm text-red-400 pt-0.5">{message.content}</p>
+      </div>
+    )
+  }
+
   const paragraphs = message.content.split('\n\n').filter(Boolean)
 
   return (
@@ -163,20 +196,10 @@ function MessageBubble({
                 {message.replanCount} replan{message.replanCount !== 1 ? 's' : ''}
               </span>
             )}
-            {message.citations && message.citations.length > 0 && (
-              <Link
-                href={`/chat/${conversationId}?msg=${message.id}`}
-                data-testid="view-detail-link"
-                className="font-mono text-xs text-zinc-600 hover:text-zinc-400 flex items-center gap-1 transition-colors"
-              >
-                {message.citations.length} citations
-                <ChevronRight className="w-3 h-3" />
-              </Link>
-            )}
           </div>
         )}
 
-        {/* Agent trace accordion — only after streaming */}
+        {/* Agent trace accordion — only after streaming, when sub-queries present */}
         {!isStreaming && message.subQueries && message.subQueries.length > 0 && (
           <div className="border border-zinc-800 rounded-md overflow-hidden">
             <button
@@ -212,9 +235,9 @@ function MessageBubble({
   )
 }
 
-// ── Thinking indicator (before streaming starts) ─────────────────────────────
+// ── Thinking indicator ────────────────────────────────────────────────────────
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ status }: { status: string }) {
   return (
     <div className="flex gap-3" data-testid="typing-indicator">
       <div className="w-6 h-6 rounded-md border border-zinc-800 bg-zinc-900 flex items-center justify-center flex-shrink-0 mt-1">
@@ -224,7 +247,7 @@ function ThinkingIndicator() {
         <span className="typing-dot" />
         <span className="typing-dot" />
         <span className="typing-dot" />
-        <span className="font-mono text-xs text-zinc-700 ml-2">thinking…</span>
+        <span className="font-mono text-xs text-zinc-700 ml-2">{status}</span>
       </div>
     </div>
   )
@@ -239,27 +262,41 @@ const SAMPLE_QUESTIONS = [
   'How does the conversational memory paper achieve 4× context compression?',
 ]
 
-// ── Main page ────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+const INITIAL_CONV: Conversation = {
+  id: `conv_${Date.now()}`,
+  title: 'New conversation',
+  createdAt: new Date().toISOString(),
+  messages: [],
+}
 
 export default function ChatPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS)
-  const [activeConvId, setActiveConvId] = useState<string>(MOCK_CONVERSATIONS[0].id)
+  const [papers, setPapers] = useState<Paper[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([INITIAL_CONV])
+  const [activeConvId, setActiveConvId] = useState<string>(INITIAL_CONV.id)
   const [input, setInput] = useState('')
   const [isThinking, setIsThinking] = useState(false)
+  const [thinkingStatus, setThinkingStatus] = useState('thinking…')
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const abortRef = useRef<(() => void) | null>(null)
 
   const activeConv = conversations.find((c) => c.id === activeConvId) ?? conversations[0]
 
+  // ── Load papers for sidebar ───────────────────────────────────────────────
+  useEffect(() => {
+    listPapers().then(setPapers).catch(() => {/* sidebar is decorative */})
+  }, [])
+
+  // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeConv?.messages, isThinking, streamingMsgId])
 
-  // Cleanup interval on unmount
+  // ── Cleanup SSE on unmount ────────────────────────────────────────────────
   useEffect(() => {
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+    return () => { abortRef.current?.() }
   }, [])
 
   const handleNewConversation = () => {
@@ -277,107 +314,119 @@ export default function ChatPage() {
     const query = (text ?? input).trim()
     if (!query || isThinking || streamingMsgId) return
 
-    const userMsg: Message = {
-      id: `msg_${Date.now()}`,
-      role: 'user',
-      content: query,
-      timestamp: new Date().toISOString(),
-    }
-
     const convIdSnapshot = activeConvId
+    const startTime = Date.now()
 
+    // Add user message
+    const userMsgId = `msg_${Date.now()}_user`
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id !== convIdSnapshot) return c
         return {
           ...c,
           title: c.messages.length === 0 ? query.slice(0, 50) : c.title,
-          messages: [...c.messages, userMsg],
+          messages: [...c.messages, {
+            id: userMsgId,
+            role: 'user' as const,
+            content: query,
+            timestamp: new Date().toISOString(),
+          }],
         }
       })
     )
     setInput('')
     setIsThinking(true)
+    setThinkingStatus('thinking…')
 
-    const fullContent = getMockResponse(query)
-    const subQueries = getMockSubQueries(query)
-    const confidence: 'high' | 'medium' | 'low' = Math.random() > 0.3 ? 'high' : Math.random() > 0.5 ? 'medium' : 'low'
-    const replanCount = Math.random() > 0.7 ? 1 : 0
-    const startTime = Date.now()
+    let aiMsgId: string | null = null
 
-    // Phase 1: thinking delay (1.2–1.8s)
-    const thinkDelay = 1200 + Math.random() * 600
-    setTimeout(() => {
-      const msgId = `msg_${Date.now()}_ai`
-
-      // Add empty streaming message
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id !== convIdSnapshot) return c
-          return {
-            ...c,
-            messages: [...c.messages, {
-              id: msgId,
-              role: 'assistant' as const,
-              content: '',
-              timestamp: new Date().toISOString(),
-            }],
-          }
-        })
-      )
-      setIsThinking(false)
-      setStreamingMsgId(msgId)
-
-      // Phase 2: stream characters
-      let charIndex = 0
-      const CHUNK = 4       // chars per tick
-      const TICK = 22       // ms per tick → ~180 chars/sec
-
-      intervalRef.current = setInterval(() => {
-        charIndex = Math.min(charIndex + CHUNK, fullContent.length)
-        const partial = fullContent.slice(0, charIndex)
-
+    abortRef.current = streamQuery(query, (event) => {
+      if (event.type === 'progress') {
+        setThinkingStatus(event.message)
+      } else if (event.type === 'token') {
+        if (!aiMsgId) {
+          // First token — switch from thinking indicator to streaming message
+          aiMsgId = `msg_${Date.now()}_ai`
+          const capturedId = aiMsgId
+          setConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== convIdSnapshot) return c
+              return {
+                ...c,
+                messages: [...c.messages, {
+                  id: capturedId,
+                  role: 'assistant' as const,
+                  content: '',
+                  timestamp: new Date().toISOString(),
+                }],
+              }
+            })
+          )
+          setIsThinking(false)
+          setStreamingMsgId(capturedId)
+        }
+        const capturedId = aiMsgId
         setConversations((prev) =>
           prev.map((c) => {
             if (c.id !== convIdSnapshot) return c
             return {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === msgId ? { ...m, content: partial } : m
+                m.id === capturedId
+                  ? { ...m, content: m.content + event.content }
+                  : m
               ),
             }
           })
         )
-
-        if (charIndex >= fullContent.length) {
-          if (intervalRef.current) clearInterval(intervalRef.current)
-          // Finalise with metadata
-          setConversations((prev) =>
-            prev.map((c) => {
-              if (c.id !== convIdSnapshot) return c
-              return {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === msgId
-                    ? {
-                        ...m,
-                        content: fullContent,
-                        confidence,
-                        processingMs: Date.now() - startTime,
-                        cacheHit: false,
-                        subQueries,
-                        replanCount,
-                        citations: [],
-                      }
-                    : m
-                ),
-              }
-            })
-          )
-          setStreamingMsgId(null)
-        }
-      }, TICK)
-    }, thinkDelay)
+      } else if (event.type === 'done') {
+        const capturedId = aiMsgId
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== convIdSnapshot) return c
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === capturedId
+                  ? {
+                      ...m,
+                      // Use done.answer as ground truth (handles edge case where
+                      // token stream and assembled answer diverge)
+                      content: event.answer || m.content,
+                      confidence: event.confidence,
+                      processingMs: Date.now() - startTime,
+                      cacheHit: false,
+                    }
+                  : m
+              ),
+            }
+          })
+        )
+        setStreamingMsgId(null)
+        setIsThinking(false)
+        abortRef.current = null
+      } else if (event.type === 'error') {
+        const errId = `msg_${Date.now()}_err`
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== convIdSnapshot) return c
+            return {
+              ...c,
+              messages: [...c.messages, {
+                id: errId,
+                role: 'assistant' as const,
+                content: `Error: ${event.detail}`,
+                timestamp: new Date().toISOString(),
+                isError: true,
+              }],
+            }
+          })
+        )
+        setIsThinking(false)
+        setStreamingMsgId(null)
+        abortRef.current = null
+      }
+    })
   }, [input, isThinking, streamingMsgId, activeConvId])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -433,7 +482,7 @@ export default function ChatPage() {
           ))}
         </div>
 
-        {/* Bottom nav + papers */}
+        {/* Bottom nav + corpus */}
         <div className="border-t border-zinc-800">
           <div className="px-4 pt-3 pb-1 flex items-center gap-3">
             <Link
@@ -456,24 +505,24 @@ export default function ChatPage() {
           </div>
 
           <div className="px-4 pb-3">
-            <p className="font-mono text-xs text-zinc-700 mb-1.5">Corpus · {MOCK_PAPERS.length} papers</p>
+            <p className="font-mono text-xs text-zinc-700 mb-1.5">Corpus · {papers.length} papers</p>
             <div className="space-y-1">
-              {MOCK_PAPERS.slice(0, 4).map((p) => (
+              {papers.slice(0, 4).map((p) => (
                 <div
                   key={p.id}
                   data-testid={`sidebar-paper-${p.id}`}
                   className="flex items-center gap-2 text-xs text-zinc-600"
                 >
                   <FileText className="w-3 h-3 flex-shrink-0" />
-                  <span className="line-clamp-1 font-mono">{p.shortTitle}</span>
+                  <span className="line-clamp-1 font-mono">{p.title.split(' ').slice(0, 2).join(' ')}</span>
                 </div>
               ))}
-              {MOCK_PAPERS.length > 4 && (
+              {papers.length > 4 && (
                 <Link
                   href="/library"
                   className="text-xs text-zinc-700 hover:text-zinc-500 font-mono transition-colors"
                 >
-                  +{MOCK_PAPERS.length - 4} more
+                  +{papers.length - 4} more
                 </Link>
               )}
             </div>
@@ -519,7 +568,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto px-6 py-6" data-testid="messages-container">
           <div className="max-w-3xl mx-auto space-y-6">
             {activeConv?.messages.length === 0 && !isBusy && (
-              <EmptyState onSelect={(q) => handleSend(q)} />
+              <EmptyState paperCount={papers.length} onSelect={(q) => handleSend(q)} />
             )}
 
             {activeConv?.messages.map((msg) => (
@@ -531,7 +580,7 @@ export default function ChatPage() {
               />
             ))}
 
-            {isThinking && <ThinkingIndicator />}
+            {isThinking && <ThinkingIndicator status={thinkingStatus} />}
             <div ref={endRef} />
           </div>
         </div>
@@ -543,7 +592,6 @@ export default function ChatPage() {
               isBusy ? 'border-zinc-800 opacity-60' : 'border-zinc-800 focus-within:border-zinc-700'
             }`}>
               <textarea
-                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -575,7 +623,7 @@ export default function ChatPage() {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
+function EmptyState({ paperCount, onSelect }: { paperCount: number; onSelect: (q: string) => void }) {
   return (
     <div className="text-center py-16" data-testid="chat-empty-state">
       <BrainCircuit className="w-8 h-8 text-zinc-700 mx-auto mb-4" />
@@ -583,103 +631,24 @@ function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
         What do you want to know?
       </h2>
       <p className="text-sm text-zinc-600 mb-8">
-        Ask questions about your {MOCK_PAPERS.length} indexed papers
+        {paperCount > 0
+          ? `Ask questions about your ${paperCount} indexed papers`
+          : 'Upload papers in the Library to get started'}
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-xl mx-auto text-left">
-        {SAMPLE_QUESTIONS.map((q, i) => (
-          <button
-            key={i}
-            onClick={() => onSelect(q)}
-            data-testid={`sample-question-${i}`}
-            className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 transition-colors text-left leading-relaxed"
-          >
-            {q}
-          </button>
-        ))}
-      </div>
+      {paperCount > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-xl mx-auto text-left">
+          {SAMPLE_QUESTIONS.map((q, i) => (
+            <button
+              key={i}
+              onClick={() => onSelect(q)}
+              data-testid={`sample-question-${i}`}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 transition-colors text-left leading-relaxed"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
-}
-
-// ── Mock response generator ───────────────────────────────────────────────────
-
-function getMockResponse(query: string): string {
-  const q = query.toLowerCase()
-  if (q.includes('best-route') || q.includes('uniroute') || q.includes('routing')) {
-    return `BEST-Route and UniRoute represent two distinct philosophies in LLM routing.
-
-**BEST-Route** uses a training-free composite score combining task accuracy and token budget adherence [BEST-Route, §Method]. The tolerance parameter ε allows configurable trade-offs at inference time without any routing-specific fine-tuning.
-
-**UniRoute** instead learns a unified routing objective end-to-end [UniRoute, §Unified Framework]. Weights are optimized over routing supervision data, which yields better calibration when sufficient training examples exist [UniRoute, §Results].
-
-**Note:** [BEST-Route] achieves significantly lower latency on simple queries by design, while [UniRoute] requires a training pipeline but generalizes better to novel query types [UniRoute, §Analysis].`
-  }
-  if (q.includes('graph') || q.includes('multi-hop')) {
-    return `GraphRAG addresses multi-hop retrieval failures that arise from BM25's lexical matching limitation [From BM25 to Corrective RAG, §BM25 Era].
-
-The system builds a knowledge graph of entity-relation triples from all ingested papers [GraphRAG, §Graph Construction]. At retrieval time, anchor entities from initial seed retrieval are expanded up to 2 hops through the graph, surfacing related chunks from other papers [GraphRAG, §Multi-Hop Retrieval].
-
-GraphRAG achieves significantly higher recall on 2-hop benchmarks versus dense+BM25 hybrid [GraphRAG, §Experiments]. However, gains diminish at 3 hops, consistent with noise accumulation at deeper traversal depths — a known trade-off the authors acknowledge [GraphRAG, §Ablation Study].`
-  }
-  if (q.includes('memory') || q.includes('compression') || q.includes('context')) {
-    return `The Conversational Memory paper uses a hierarchical compression architecture with two tiers [Conversational Memory, §Memory Architecture].
-
-**Short-term** memory retains the most recent N turns verbatim — preserving immediate coherence without any compression loss [Conversational Memory, §Compression Strategies].
-
-**Long-term** memory compresses older turns into structured *memory blocks* — summaries of entities, references, and key claims — retrieved by semantic similarity rather than prepended wholesale [Conversational Memory, §Retrieval-Based Memory].
-
-The key insight is that verbatim recall is rarely required — semantic content preservation suffices for most conversational queries [Conversational Memory, §Experiments]. The paper does note one important caveat: compression quality degrades for conversations with dense numerical data where exact values must be preserved.`
-  }
-  if (q.includes('failure') || q.includes('naive rag') || q.includes('cross-paper')) {
-    return `Naive RAG has a systematic failure on cross-paper questions — questions that require synthesizing information from two or more papers in a single retrieval pass.
-
-The core issue is that a single vector retrieval query can only surface chunks from whichever paper scores highest semantically [From BM25 to Corrective RAG, §Dense Retrieval]. When a question asks "how does A compare to B?", the retriever picks a winner and returns only its context — leaving the answer one-sided and marked low-confidence.
-
-This is why the agentic pipeline uses **sub-query decomposition** [GraphRAG, §Multi-Hop Retrieval]: the planner splits "compare A vs B" into two independent sub-queries, retrieves from each paper in parallel fan-out, then synthesizes across both result sets. The gate node validates that both papers are represented before synthesis proceeds [BEST-Route, §Method].`
-  }
-  return `Based on the indexed corpus, the retrieved context shows relevant information across multiple papers.
-
-The question touches on aspects covered in several of the indexed papers [From BM25 to Corrective RAG, §Introduction]. The core methodology involves retrieval-augmented generation with attribution-preserving synthesis [BEST-Route, §Method], evaluated against standard benchmarks [UniRoute, §Results].
-
-Cross-paper analysis reveals that the approaches share common assumptions about retrieval quality [GraphRAG, §Background], though they differ in how they handle edge cases where context is ambiguous or sparse.
-
-For a more specific answer, consider refining your question to focus on a particular paper or methodology.`
-}
-
-function getMockSubQueries(query: string): string[] {
-  const q = query.toLowerCase()
-  if (q.includes('routing') || q.includes('best-route')) {
-    return [
-      'What is the primary routing metric in BEST-Route?',
-      'How does UniRoute define its unified routing objective?',
-      'Comparison of training-free vs. learned routing approaches',
-    ]
-  }
-  if (q.includes('graph') || q.includes('multi-hop')) {
-    return [
-      'How does BM25 fail on multi-hop retrieval?',
-      'GraphRAG knowledge graph construction methodology',
-      'Multi-hop retrieval evaluation on benchmark datasets',
-      'Limitations of graph traversal at depth ≥ 3',
-    ]
-  }
-  if (q.includes('memory') || q.includes('compression')) {
-    return [
-      'Short-term memory window strategy in conversational LLMs',
-      'Long-term memory compression using structured summaries',
-      'Quality degradation trade-offs in memory compression',
-    ]
-  }
-  if (q.includes('failure') || q.includes('naive')) {
-    return [
-      'Single-pass retrieval limitations for cross-paper questions',
-      'Sub-query decomposition for multi-paper synthesis',
-      'Gate node validation for coverage sufficiency',
-    ]
-  }
-  return [
-    query.slice(0, 60) + (query.length > 60 ? '…' : ''),
-    'Related methodology across indexed papers',
-    'Comparative analysis of approaches',
-  ]
 }
