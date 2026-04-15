@@ -32,7 +32,8 @@ huggingface/
 # Qdrant local storage (if running without Docker volume)
 qdrant_storage/
 
-# Eval results (generated, not committed)
+# Eval — keep local only
+eval/
 eval_results/
 *.jsonl
 
