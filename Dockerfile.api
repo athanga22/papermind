@@ -7,16 +7,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python deps
+# Copy everything needed for the editable install (-e file:///app in requirements.lock)
+# pyproject.toml must be present before pip resolves the local package reference.
 COPY pyproject.toml requirements.lock* ./
-RUN pip install --no-cache-dir uv && \
-    uv pip install --system -r requirements.lock || \
-    pip install --no-cache-dir -r requirements.lock
-
-# Copy source
 COPY api/ api/
 COPY query/ query/
 COPY ingestion/ ingestion/
+COPY graph/ graph/
+COPY scripts/ scripts/
+
+# Install uv then use it to install from the lockfile.
+# The lockfile contains "-e file:///Users/…/papermind" which uv rewrites to
+# the current WORKDIR when run inside the container (because pyproject.toml is here).
+# We strip that line and install the package directly instead.
+RUN pip install --no-cache-dir uv && \
+    grep -v '^-e file://' requirements.lock > /tmp/requirements_clean.lock && \
+    uv pip install --system -r /tmp/requirements_clean.lock && \
+    uv pip install --system -e .
 
 # Create data dirs
 RUN mkdir -p data/papers data/parsed data/bm25
