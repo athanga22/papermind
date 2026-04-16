@@ -372,7 +372,8 @@ class TrimodalRetriever:
         return results
 
     def close(self) -> None:
-        self._neo4j.close()
+        if self._neo4j is not None:
+            self._neo4j.close()
 
     def __enter__(self):  return self
     def __exit__(self, *_): self.close()
