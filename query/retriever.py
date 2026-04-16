@@ -70,10 +70,10 @@ class TrimodalRetriever:
         self._openai  = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
         self._qdrant  = QdrantClient(host=os.getenv("QDRANT_HOST", "localhost"),
                                      port=int(os.getenv("QDRANT_PORT", "6333")))
-        self._neo4j   = GraphDatabase.driver(
-            os.environ["NEO4J_URI"],
-            auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"]),
-        )
+        # Neo4j is opt-in (use_graph=False by default). Driver is lazily
+        # initialised only when _graph() is first called — so the server
+        # doesn't need to be running for normal dense+BM25 operation.
+        self._neo4j   = None
         self._bm25    = BM25Index()
         self._bm25.load()
         # Cohere is optional (only needed when rerank is enabled). Lazily init to
@@ -144,6 +144,13 @@ class TrimodalRetriever:
         significant = [w for w in words if w not in stopwords and len(w) >= 4]
         if not significant:
             return []
+
+        # Lazy-init Neo4j driver on first graph call
+        if self._neo4j is None:
+            self._neo4j = GraphDatabase.driver(
+                os.environ["NEO4J_URI"],
+                auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"]),
+            )
 
         with self._neo4j.session() as session:
             result = session.run(
