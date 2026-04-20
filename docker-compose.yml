@@ -1,4 +1,40 @@
 services:
+  # ── FastAPI backend ───────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data        # papers, bm25 index, parsed cache
+      - ./api:/app/api
+      - ./query:/app/query
+      - ./ingestion:/app/ingestion
+    env_file: .env
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Next.js frontend ──────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   # ── Vector store ──────────────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:v1.16.1
@@ -21,7 +57,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-changeme}
       POSTGRES_DB: langfuse
     volumes:
       - langfuse_db_data:/var/lib/postgresql/data
@@ -40,12 +76,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@langfuse-db:5432/langfuse
+      DATABASE_URL: ${LANGFUSE_DATABASE_URL:-postgresql://postgres:changeme@langfuse-db:5432/langfuse}
       NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: papermind-dev-secret
-      SALT: papermind-dev-salt
-      # generate a real one for prod: openssl rand -hex 32
-      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-replace-in-prod}
+      SALT: ${LANGFUSE_SALT:-changeme-replace-in-prod}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-set-this-in-your-env-file}
       TELEMETRY_ENABLED: "false"
     restart: unless-stopped
 

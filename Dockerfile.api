@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+COPY api/ api/
+COPY query/ query/
+COPY ingestion/ ingestion/
+COPY graph/ graph/
+COPY scripts/ scripts/
+
+RUN pip install --no-cache-dir .
+
+# Create data dirs
+RUN mkdir -p data/papers data/parsed data/bm25
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

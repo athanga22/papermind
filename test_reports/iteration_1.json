@@ -1,0 +1,49 @@
+{
+  "summary": "Comprehensive frontend testing of PaperMind Next.js app. All major pages render correctly with mock data. One logic bug found in answer detail page question attribution. All navigation, interactions, and mock AI flows work as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AnswerDetailPage (/chat/[id]/page.tsx)",
+        "issue": "Wrong question displayed for multi-turn conversations. The userMsg lookup uses .find() which returns the FIRST user message before targetMsg, not the IMMEDIATELY PRECEDING one. For /chat/conv1?msg=m4 (GraphRAG answer), it shows m1's question ('What is the primary generation metric...') instead of m3's question ('Does GraphRAG address multi-hop questions...').",
+        "selector": "[data-testid='detail-question']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Chat page",
+        "issues": ["The send button data-testid is 'chat-send-btn' but test initially searched for 'send-button' — minor testid naming note (not a user-facing issue)"]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix userMsg lookup in /app/frontend/src/app/chat/[id]/page.tsx line 120-127: Change .find() to use reverse search (e.g., use [...conversation.messages].reverse().find(...)) or use .findLast() to get the LAST user message before targetMsg index, not the first."
+  ],
+  "critical_code_review_comments": [
+    "BUG (HIGH): In /app/frontend/src/app/chat/[id]/page.tsx, line 121: `conversation.messages.find((m, i) => m.role === 'user' && i < conversation.messages.indexOf(targetMsg))` returns the FIRST user message before targetMsg, not the preceding one. Fix: replace with `conversation.messages.findLast((m, i) => m.role === 'user' && conversation.messages.indexOf(m) < conversation.messages.indexOf(targetMsg))` or use a reverse-filtered approach.",
+    "new-conversation-btn vs new-conversation: The data-testid in chat page is 'new-conversation-btn' but should be consistently named. Minor consistency issue."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A",
+    "frontend": "95%"
+  },
+  "test_credentials": "None required — all mock data, no auth",
+  "seed_data_creation": "None — all data is from mock-data.ts",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All pages tested: Landing (hero, nav, features bento x3, RAGAS metrics x4 all pass), Library (6 papers, upload dropzone, abstract toggle expand/collapse, remove paper — all pass), Chat (2 conversations in sidebar, paper corpus list, sample questions x4, new conversation button, chat input typing, agent trace accordion expand — all pass), Answer Detail (tabs x3, citation pills, citation index, retrieved chunks, agent trace sub-queries, pipeline stages — all pass). Only bug: answer detail shows wrong question for multi-turn convs. Mock AI response simulation works correctly.",
+  "rca_of_the_issue": {
+    "bug": "Wrong question shown in AnswerDetailPage for multi-turn conversations",
+    "file": "/app/frontend/src/app/chat/[id]/page.tsx",
+    "line": "121-127",
+    "root_cause": "Array.prototype.find() returns the FIRST element matching the predicate. For conv1 with messages [m1(user), m2(assistant), m3(user), m4(assistant)], when targetMsg=m4, find() returns m1 (first user msg with index < 3) instead of m3 (last user msg before m4).",
+    "fix": "Replace .find() with .findLast() or filter+pop: `conversation.messages.filter((m, i) => m.role === 'user' && i < conversation.messages.indexOf(targetMsg)).at(-1)`"
+  }
+}
