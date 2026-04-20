@@ -30,8 +30,8 @@ dependencies = [
     "anthropic>=0.34.0",
     "cohere>=5.9.0",
 
-    # Observability
-    "langfuse>=2.0.0",
+    # Observability — SDK v4+ (OTLP), requires Langfuse Cloud or self-hosted server v3+
+    "langfuse>=4.0.0",
 
     # Agentic pipeline
     "langgraph>=0.2.0",

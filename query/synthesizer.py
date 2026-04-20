@@ -29,7 +29,7 @@ from query.retriever import RetrievedChunk
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-SYNTHESIS_MODEL = "claude-sonnet-4-5"
+SYNTHESIS_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS      = 1024
 
 _SYSTEM_PROMPT = """\
@@ -63,10 +63,12 @@ Rules:
 
 @dataclass
 class SynthesisResult:
-    answer:     str
-    confidence: str                        # "high" | "medium" | "low"
-    citations:  list[str] = field(default_factory=list)   # cited chunk_ids
-    raw:        str = ""                   # full model output before parsing
+    answer:       str
+    confidence:   str                        # "high" | "medium" | "low"
+    citations:    list[str] = field(default_factory=list)   # cited chunk_ids
+    raw:          str = ""                   # full model output before parsing
+    input_tokens:  int = 0                   # Anthropic prompt tokens (for Langfuse cost)
+    output_tokens: int = 0                   # Anthropic completion tokens
 
 
 # ── Synthesizer ───────────────────────────────────────────────────────────────
@@ -77,7 +79,8 @@ class Synthesizer:
     Instantiate once, call synthesize() per query.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, model: str = SYNTHESIS_MODEL) -> None:
+        self._model  = model
         self._client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     # ── Build context block ───────────────────────────────────────────────────
@@ -159,14 +162,17 @@ class Synthesizer:
         )
 
         response = self._client.messages.create(
-            model=SYNTHESIS_MODEL,
+            model=self._model,
             max_tokens=MAX_TOKENS,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_msg}],
         )
 
-        raw = response.content[0].text
-        return self._parse(raw, chunks)
+        raw    = response.content[0].text
+        result = self._parse(raw, chunks)
+        result.input_tokens  = response.usage.input_tokens
+        result.output_tokens = response.usage.output_tokens
+        return result
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
