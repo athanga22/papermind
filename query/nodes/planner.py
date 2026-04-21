@@ -21,9 +21,11 @@ from query.state import PaperMindState
 
 
 DEFAULT_PARSED_DIR = Path("data/parsed")
-# Planner uses Sonnet — query decomposition is reasoning-heavy work.
-# Override with PAPERMIND_PLANNER_MODEL env var if needed.
 PLANNER_MODEL = os.getenv("PAPERMIND_PLANNER_MODEL", "claude-haiku-4-5-20251001")
+
+# Module-level cache — paper titles never change at runtime.
+# Avoids re-reading 10 markdown files on every classifier + planner call.
+_TITLES_CACHE: list[str] | None = None
 
 
 def _extract_title_from_markdown(markdown: str) -> str | None:
@@ -37,10 +39,15 @@ def _extract_title_from_markdown(markdown: str) -> str | None:
 def load_paper_titles(parsed_dir: Path = DEFAULT_PARSED_DIR, limit: int = 10) -> list[str]:
     """
     Load up to `limit` paper titles from LlamaParse markdown cache in `data/parsed/`.
-    Title heuristic: first markdown header (`# ...`) in each file.
+    Result is cached at module level — disk is only read once per process.
     """
+    global _TITLES_CACHE
+    if _TITLES_CACHE is not None:
+        return _TITLES_CACHE
+
     if not parsed_dir.exists():
-        return []
+        _TITLES_CACHE = []
+        return _TITLES_CACHE
 
     titles: list[str] = []
     for md_path in sorted(parsed_dir.glob("*.md")):
@@ -53,7 +60,8 @@ def load_paper_titles(parsed_dir: Path = DEFAULT_PARSED_DIR, limit: int = 10) ->
             titles.append(title)
         if len(titles) >= limit:
             break
-    return titles
+    _TITLES_CACHE = titles
+    return _TITLES_CACHE
 
 
 _SYSTEM = """You are the PaperMind Research Planner. Your goal is to decompose research questions into a minimal, targeted search strategy for a corpus of 10 technical papers.
@@ -119,6 +127,13 @@ def planner_node(state: PaperMindState) -> PaperMindState:
     # Hard cap set by classifier_node. Default 4 if classifier didn't run.
     max_sq = int(state.get("max_sub_queries") or 4)
     target_papers = list(state.get("target_papers") or [])
+
+    # Simple queries (max_sub_queries==2, no target papers) don't need
+    # decomposition — the question itself is already a precise search string.
+    # Skip the LLM call entirely and use the raw query as the single sub-query.
+    if max_sq <= 2 and not target_papers:
+        return {**state, "sub_queries": [query]}
+
     titles = load_paper_titles(limit=10)
 
     universe_context = (

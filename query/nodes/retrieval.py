@@ -11,6 +11,7 @@ Note: Cohere reranking is intentionally disabled here (agent-only delta).
 from __future__ import annotations
 
 import os
+import threading
 from typing import Any
 
 from langgraph.config import get_stream_writer
@@ -20,6 +21,21 @@ from query.state import PaperMindState
 
 
 RETRIEVAL_TOP_K = int(os.getenv("PAPERMIND_RETRIEVAL_TOP_K", "5"))
+
+# Singleton retriever — initialized once, shared across all parallel retrieve_one
+# branches. Avoids opening a new Qdrant connection + loading the BM25 index on
+# every sub-query. close() only shuts down Neo4j (unused), so sharing is safe.
+_RETRIEVER: TrimodalRetriever | None = None
+_RETRIEVER_LOCK = threading.Lock()
+
+
+def _get_retriever() -> TrimodalRetriever:
+    global _RETRIEVER
+    if _RETRIEVER is None:
+        with _RETRIEVER_LOCK:
+            if _RETRIEVER is None:
+                _RETRIEVER = TrimodalRetriever()
+    return _RETRIEVER
 
 
 def _chunk_to_dict(chunk, sub_query: str) -> dict[str, Any]:
@@ -59,15 +75,15 @@ def retrieve_one_node(state: PaperMindState) -> dict[str, Any]:
     get_stream_writer()({"type": "progress", "node": "retrieve", "message": f"Retrieving: {sub_query[:60]}"})
 
     try:
-        with TrimodalRetriever() as retriever:
-            chunks = retriever.retrieve(
-                sub_query,
-                top_k=RETRIEVAL_TOP_K,
-                use_dense=True,
-                use_bm25=True,
-                use_graph=False,
-                use_rerank=False,
-            )
+        retriever = _get_retriever()
+        chunks = retriever.retrieve(
+            sub_query,
+            top_k=RETRIEVAL_TOP_K,
+            use_dense=True,
+            use_bm25=True,
+            use_graph=False,
+            use_rerank=False,
+        )
         return {
             "retrieved_chunks": [_chunk_to_dict(c, sub_query) for c in chunks],
             "failed_sub_queries": [],

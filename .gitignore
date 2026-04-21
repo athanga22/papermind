@@ -49,6 +49,9 @@ docs/
 # Claude Code internal session data
 .claude/
 
+# Emergent.sh cloud IDE metadata
+.emergent/
+
 # IDE
 .vscode/
 .idea/
